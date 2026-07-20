@@ -1222,9 +1222,9 @@
     diacritic "^0.0.2"
     etch "^0.14.0"
 
-"@lumine-code/superstring@https://github.com/lumine-code/superstring.git#02dc4482caffa94023dd9386d53397b73236b05d":
+"@lumine-code/superstring@https://github.com/lumine-code/superstring.git#82b92783edf4a75dd28584dece76dbd064524f60":
   version "4.0.0"
-  resolved "https://github.com/lumine-code/superstring.git#02dc4482caffa94023dd9386d53397b73236b05d"
+  resolved "https://github.com/lumine-code/superstring.git#82b92783edf4a75dd28584dece76dbd064524f60"
   dependencies:
     node-addon-api "^8.9.0"
 
