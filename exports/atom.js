@@ -4,6 +4,8 @@ const { Emitter, Disposable, CompositeDisposable } = require("event-kit");
 const BufferedNodeProcess = require("../src/buffered-node-process");
 const BufferedProcess = require("../src/buffered-process");
 const GitRepository = require("../src/git-repository");
+const { GitError, LargeRepoError } = require("../src/git-error");
+const { filterPatch } = require("../src/patch-filter");
 const Notification = require("../src/notification");
 const { watchPath, watchFile } = require("../src/path-watcher");
 
@@ -11,6 +13,9 @@ const atomExport = {
   BufferedNodeProcess,
   BufferedProcess,
   GitRepository,
+  GitError,
+  LargeRepoError,
+  filterPatch,
   Notification,
   TextBuffer,
   Point,
