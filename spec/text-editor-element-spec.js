@@ -400,6 +400,10 @@ describe("TextEditorElement", () => {
       editor.update({ autoHeight: false });
       element.getModel().setText("x\n".repeat(20));
       element.style.height = 120 + horizontalScrollbarHeight + "px";
+      // Force a synchronous re-measure instead of waiting on ResizeObserver,
+      // which macOS CI can starve long enough to leave a stale (smaller)
+      // viewport and too few visible rows for the assertions below.
+      element.component.didResize();
       await element.getNextUpdatePromise();
 
       element.setScrollTop(80);
