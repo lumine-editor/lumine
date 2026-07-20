@@ -19,7 +19,7 @@ XPStyle on
 !macroend
 
 !macro customInstall ; Macro called by electron-builder
-  ; Set the 'InstallLocation' Registry Key for GitHub Desktop
+  ; Set the 'InstallLocation' Registry Key for Lumine
   WriteRegStr SHELL_CONTEXT "${UNINSTALL_REGISTRY_KEY}" "InstallLocation" "$INSTDIR"
 !macroend
 
