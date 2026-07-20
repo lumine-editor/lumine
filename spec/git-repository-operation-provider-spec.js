@@ -230,6 +230,35 @@ describe("GitRepositoryOperationProvider", () => {
     );
   });
 
+  it("orders `checkout -b <name>` before `--track` so the branch name survives", async () => {
+    const calls = [];
+    const provider = new GitRepositoryOperationProvider({
+      exec: async (args, workingDirectory, options) => {
+        calls.push({ args, workingDirectory, options });
+        return { exitCode: 0, stdout: "", stderr: "" };
+      },
+    });
+    const workingDirectory = path.join(temp.mkdirSync("git-checkout-track"), "repo");
+    const operations = provider.createRepositoryOperations({ workingDirectory });
+
+    await operations.checkout("pr-123/owner/feature", {
+      createNew: true,
+      track: true,
+      startPoint: "refs/remotes/origin/feature",
+    });
+
+    // The new branch name must immediately follow `-b`; `--track` and the start
+    // point come after. Emitting `--track` first made git read it as the branch
+    // name ("fatal: '--track' is not a valid branch name").
+    expect(calls[0].args).toEqual([
+      "checkout",
+      "-b",
+      "pr-123/owner/feature",
+      "--track",
+      "refs/remotes/origin/feature",
+    ]);
+  });
+
   it("supports injected configuration, cleanup modes, and merge-file labels", async () => {
     const calls = [];
     const provider = new GitRepositoryOperationProvider({

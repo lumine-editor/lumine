@@ -153,8 +153,12 @@ class GitRepositoryOperations {
     addBooleanFlag(args, options.force, "--force");
     addBooleanFlag(args, options.detach, "--detach");
     if (options.createNew || options.createNewBranch) args.push("-b");
-    if (options.track) args.push("--track");
+    // The new branch name must come immediately after `-b`; `--track` and the
+    // start point follow it (git: `checkout -b <name> --track <start-point>`).
+    // Emitting `--track` before the name made git read it as the branch name
+    // ("fatal: '--track' is not a valid branch name").
     args.push(reference);
+    if (options.track) args.push("--track");
     if (options.startPoint) args.push(options.startPoint);
     return this.run(args, options);
   }
