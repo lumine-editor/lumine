@@ -6201,6 +6201,24 @@ describe("TextEditorComponent", () => {
       await component.getNextUpdatePromise();
     });
 
+    it("resolves getNextUpdatePromise when the component is hidden before a scheduled update flushes", async () => {
+      const { component, element } = buildComponent({ autoHeight: false });
+
+      element.style.width = "50px";
+      component.didResize(); // schedules an update while the component is visible
+      component.didHide(); // hidden before the scheduled update flushes
+
+      // The bailed-out update must resolve the promise rather than leak it;
+      // a component that is never shown again would otherwise hang callers
+      // forever.
+      await component.getNextUpdatePromise();
+      expect(component.visible).toBe(false);
+
+      // Showing the component again performs the deferred update normally.
+      component.didShow();
+      expect(component.visible).toBe(true);
+    });
+
     it("does not throw an exception when the editor is soft-wrapped and changing the font size changes also the longest screen line", async () => {
       const { component, element, editor } = buildComponent({
         rowsPerTile: 3,

@@ -269,8 +269,12 @@ module.exports = class TextEditorComponent {
       return;
     }
 
-    // Don't proceed if we know we are not visible
+    // Don't proceed if we know we are not visible. Resolve rather than leak
+    // the pending update promise - the component may never be shown again, and
+    // a caller awaiting getNextUpdatePromise() would hang forever. The other
+    // bail-outs in this method resolve it for the same reason.
     if (!this.visible) {
+      if (this.resolveNextUpdatePromise) this.resolveNextUpdatePromise();
       this.updateScheduled = false;
       return;
     }
