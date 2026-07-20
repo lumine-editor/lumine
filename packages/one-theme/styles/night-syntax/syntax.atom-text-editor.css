@@ -35,11 +35,6 @@ atom-text-editor {
     background-color: var(--syntax-selection-color);
   }
 
-  .bracket-matcher .region {
-    border-bottom: 1px solid var(--syntax-cursor-color);
-    box-sizing: border-box;
-  }
-
   .invisible-character {
     color: var(--syntax-invisible-character-color);
   }
