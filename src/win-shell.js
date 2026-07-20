@@ -10,7 +10,7 @@ const runtimeAppName = getAppName();
 const obsoleteAppNames = runtimeAppName !== appName ? [runtimeAppName] : [];
 const exeName = Path.basename(process.execPath);
 const appPath = `"${process.execPath}"`;
-const fileIconPath = Path.join(process.execPath, "..", "resources", "lumine.ico");
+const fileIconPath = Path.join(process.execPath, "..", "resources", "file.ico");
 
 class ShellOption {
   constructor(key, parts, obsoleteKeys = []) {

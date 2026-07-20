@@ -306,7 +306,9 @@ let options = {
   win: {
     icon: ICONS.ico,
     extraResources: [
-      { from: ICONS.ico, to: "lumine.ico" },
+      // Unpacked so the Windows shell integration (src/win-shell.js) can point
+      // a registry DefaultIcon at a real path; files inside app.asar can't.
+      { from: "resources/win/file.ico", to: "file.ico" },
       { from: "resources/win/lumine.cmd", to: `${baseName}.cmd` },
       { from: "resources/win/lumine.js", to: `${baseName}.js` },
       { from: "resources/win/NSIS_Licenses.txt", to: "NSIS_Licenses.txt" },
