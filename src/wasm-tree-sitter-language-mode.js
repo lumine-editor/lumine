@@ -3804,13 +3804,6 @@ class LanguageLayer {
       return this.tree;
     }
 
-    // Eventually we'll take this out, but for now it serves as an indicator of
-    // how often we have to manually re-parse in between transactions —
-    // something we'd like to do as little as possible.
-    if (atom.inDevMode()) {
-      console.warn("Re-parsing tree!", this.inspect(), this.treeIsDirty);
-    }
-
     let ranges = null;
     if (this.depth > 0) {
       ranges = this.getCurrentRanges().map((r) => {
