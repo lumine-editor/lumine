@@ -32,10 +32,13 @@
     </screenshot>
   </screenshots>
   <keywords>
-    <keyword>atom</keyword>
+    <keyword>editor</keyword>
+    <keyword>text</keyword>
+    <keyword>code</keyword>
+    <keyword>IDE</keyword>
+    <keyword>development</keyword>
+    <keyword>hackable</keyword>
   </keywords>
-  <releases>
-  </releases>
   <kudos>
     <kudo>HiDpiIcon</kudo>
   </kudos>
