@@ -1134,7 +1134,14 @@ class StubWindow extends EventEmitter {
     this.show = sinon.spy();
     this.hide = sinon.spy();
     this.prepareToUnload = sinon.spy();
-    this.close = resolveClosePromise;
+    this.close = () => {
+      // A real BrowserWindow emits "closed" when it closes. Emit it here too so
+      // AtomApplication#addWindow's teardown runs and disposes per-window
+      // subscriptions (e.g. the macOS scrollbar-style listener) rather than
+      // leaking them onto the module-level emitter across tests.
+      this.browserWindow.emit("closed");
+      resolveClosePromise();
+    };
 
     this.replaceEnvironment = sinon.spy();
     this.disableZoom = sinon.spy();
@@ -1159,6 +1166,9 @@ class StubWindow extends EventEmitter {
 
     this.browserWindow = new EventEmitter();
     this.browserWindow.webContents = new EventEmitter();
+    // Real webContents exposes `send`; stub it so broadcast handlers such as the
+    // scrollbar-style listener don't throw if they fire against a stub window.
+    this.browserWindow.webContents.send = sinon.spy();
 
     const locationsToOpen = this.loadSettings.locationsToOpen || [];
     if (!(locationsToOpen.length === 1 && locationsToOpen[0].pathToOpen == null) && !this.isSpec) {
