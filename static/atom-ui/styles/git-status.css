@@ -4,7 +4,8 @@
  * (Less `&-suffix` concatenation expanded to full selectors.)
  */
 
-.status-ignored {
+.status-ignored,
+.status-ignored-name {
   color: var(--text-color-subtle);
 }
 .status-added {

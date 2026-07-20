@@ -72,15 +72,13 @@ module.exports = class File {
 
   // Update the status property of this file using the repo.
   updateStatus() {
-    const repo = repoForPath(this.path);
-    if (repo == null) return;
-
     let newStatus = null;
-    if (repo.isPathIgnoredCached(this.path)) {
+    const repo = repoForPath(this.path);
+    if (repo != null && repo.isPathIgnoredCached(this.path)) {
       newStatus = "ignored";
     } else if (this.ignoredNames.matches(this.path)) {
       newStatus = "ignored-name";
-    } else {
+    } else if (repo != null) {
       const summary = repo.getPathStatusSummary(this.path);
       if (summary != null) {
         if (summary.conflicted) {

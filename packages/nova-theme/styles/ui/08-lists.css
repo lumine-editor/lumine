@@ -45,11 +45,15 @@
   }
 
   li:not(.list-nested-item).status-ignored,
-  li.list-nested-item.status-ignored > .list-item {
+  li:not(.list-nested-item).status-ignored-name,
+  li.list-nested-item.status-ignored > .list-item,
+  li.list-nested-item.status-ignored-name > .list-item {
     color: var(--text-color-ignored);
   }
   li:not(.list-nested-item).selected.status-ignored,
-  li.list-nested-item.selected.status-ignored > .list-item {
+  li:not(.list-nested-item).selected.status-ignored-name,
+  li.list-nested-item.selected.status-ignored > .list-item,
+  li.list-nested-item.selected.status-ignored-name > .list-item {
     color: var(--text-color-ignored);
   }
 

@@ -29,13 +29,13 @@ function repositoryFor({ directoryStatusSummary = null } = {}) {
   };
 }
 
-function createDirectory(fullPath, repository, { isRoot = false } = {}) {
+function createDirectory(fullPath, repository, { isRoot = false, ignoredNames } = {}) {
   spyOn(atom.repositories, "getForPath").andReturn(repository);
   return new Directory({
     name: "repository",
     fullPath,
     isRoot,
-    ignoredNames: { matches: () => false },
+    ignoredNames: ignoredNames ?? { matches: () => false },
     useSyncFS: true,
   });
 }
@@ -97,5 +97,26 @@ describe("TreeView Directory Git status", () => {
 
     expect(directory.status).toBeNull();
     expect(repository.getDirectoryStatusSummary).toHaveBeenCalledWith(directoryPath);
+  });
+
+  it("marks a directory whose path matches core.ignoredNames", () => {
+    const directoryPath = makeTemporaryDirectory("ignored-name-directory");
+    const repository = repositoryFor({ directoryStatusSummary: null });
+
+    directory = createDirectory(directoryPath, repository, {
+      ignoredNames: { matches: (candidate) => candidate === directoryPath },
+    });
+
+    expect(directory.status).toBe("ignored-name");
+  });
+
+  it("marks ignored names even when the path is not in a repository", () => {
+    const directoryPath = makeTemporaryDirectory("ignored-name-no-repo");
+
+    directory = createDirectory(directoryPath, null, {
+      ignoredNames: { matches: (candidate) => candidate === directoryPath },
+    });
+
+    expect(directory.status).toBe("ignored-name");
   });
 });
