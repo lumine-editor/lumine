@@ -711,17 +711,23 @@ class TreeView {
 
   entryForPath(entryPath) {
     let entries = Array.from(this.list.querySelectorAll(".entry"));
+    // A symlink entry also matches its target's path via realpath, so an exact
+    // path match anywhere in the list must beat an earlier realpath alias.
+    let realPathMatchEntry = null;
     let bestMatchEntry = null,
       bestMatchLength = 0;
     for (let entry of entries) {
-      if (entry.isPathEqual(entryPath)) return entry;
-      let entryLength = entry.getPath().length;
-      if (entry.directory?.contains(entryPath) && entryLength > bestMatchLength) {
+      let currentPath = entry.getPath();
+      if (currentPath === entryPath) return entry;
+      if (realPathMatchEntry == null && entry.isPathEqual(entryPath)) {
+        realPathMatchEntry = entry;
+      }
+      if (entry.directory?.contains(entryPath) && currentPath.length > bestMatchLength) {
         bestMatchEntry = entry;
-        bestMatchLength = entryLength;
+        bestMatchLength = currentPath.length;
       }
     }
-    return bestMatchEntry;
+    return realPathMatchEntry ?? bestMatchEntry;
   }
 
   selectEntryForPath(entryPath) {
