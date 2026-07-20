@@ -3663,6 +3663,12 @@ describe("TextEditorComponent", () => {
 
         jasmine.attachToDOM(element);
         assertLinesAreAlignedWithLineNumbers(component);
+        // Detach this editor once verified. Leaving it attached pushes the next
+        // editor below the window's fold, where the IntersectionObserver can
+        // hide it before its scheduled update flushes — updateSync then bails
+        // without resolving getNextUpdatePromise(), hanging the spec (observed
+        // as a deterministic 120s timeout on macOS CI).
+        element.remove();
       }
 
       {
@@ -3679,8 +3685,8 @@ describe("TextEditorComponent", () => {
         });
 
         element.style.width = "50px";
-        // Nudge the resize directly: macOS CI starves ResizeObserver, so relying
-        // on it to schedule the update leaves getNextUpdatePromise() unresolved.
+        // Drive the resize directly instead of waiting on ResizeObserver
+        // delivery, so the update is scheduled deterministically.
         component.didResize();
         await component.getNextUpdatePromise();
         assertLinesAreAlignedWithLineNumbers(component);
@@ -3697,8 +3703,8 @@ describe("TextEditorComponent", () => {
       );
 
       element.style.width = "800px";
-      // Nudge the resize directly: macOS CI starves ResizeObserver, so relying
-      // on it to schedule the update leaves getNextUpdatePromise() unresolved.
+      // Drive the resize directly instead of waiting on ResizeObserver
+      // delivery, so the update is scheduled deterministically.
       component.didResize();
       await component.getNextUpdatePromise();
       expect(component.refs.blockDecorationMeasurementArea.offsetWidth).toBe(

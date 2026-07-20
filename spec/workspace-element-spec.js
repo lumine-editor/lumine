@@ -1248,6 +1248,9 @@ describe("WorkspaceElement", () => {
     }
 
     beforeEach(async () => {
+      // conditionPromise below polls with real setTimeout ticks, which never
+      // fire under the fake clock the harness installs by default.
+      jasmine.useRealClock();
       workspaceElement = atom.workspace.getElement();
       workspaceElement.style.height = "200px";
       workspaceElement.style.width = "600px";
@@ -1262,7 +1265,12 @@ describe("WorkspaceElement", () => {
       component2 = editor2.getElement().getComponent();
       stubAnimationFrames(component1);
       stubAnimationFrames(component2);
-      await component1.getNextUpdatePromise();
+      // Wait on the observable condition, not on getNextUpdatePromise(): if
+      // every pending update has already flushed by this point, that promise
+      // waits for an update that never comes and times the spec out.
+      await conditionPromise(
+        () => component1.hasInitialMeasurements && component2.hasInitialMeasurements,
+      );
     });
 
     it("scrolls all visible center-pane editors together", () => {
