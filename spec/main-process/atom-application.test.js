@@ -1502,6 +1502,11 @@ class LaunchScenario {
       this.windows.add(newWindow);
       return newWindow;
     });
+    // A `--test` window normally resolves a real on-disk test runner and calls
+    // `process.exit(1)` when it can't find a `package.json` root. The scenario's
+    // temp project roots have none, so short-circuit resolution; these tests
+    // only care about how spec windows sit alongside regular windows.
+    this.sinon.stub(app, "resolveTestRunnerPath").callsFake((testPath) => testPath);
     this.sinon
       .stub(app.storageFolder, "load")
       .callsFake(() => Promise.resolve(options.applicationJson || { version: "1", windows: [] }));
