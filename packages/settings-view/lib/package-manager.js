@@ -666,20 +666,30 @@ module.exports = class PackageManager {
         path: pack.path,
       });
 
+      // Determine "bundled" from the package name rather than pack.isBundled.
+      // The per-package flag is false for everything under packages/ when
+      // running in dev mode from a source checkout, which would misfile every
+      // bundled package as a community package. isBundledPackage() checks
+      // packageDependencies membership and is mode-independent.
+      const isBundled = atom.packages.isBundledPackage(pack.name);
+
       // Record the install directory's own name so the UI can flag a package
       // whose folder does not match its package.json "name" — the folder IS the
       // install slot, so a mismatch breaks require, commands, config, and
       // activation. Bundled packages are curated and always match; skip them.
-      if (!pack.isBundled && pack.path) {
+      if (!isBundled && pack.path) {
         packageInfo.directoryName = path.basename(pack.path);
       }
 
+      // Order matters: a bundled package shadowed by a copy in dev/packages
+      // must be filed under Development, so the dev-path check precedes the
+      // bundled check.
       if (packageInfo.apmInstallSource && packageInfo.apmInstallSource.type === "git") {
         packages.git.push(packageInfo);
-      } else if (pack.isBundled) {
-        packages.core.push(packageInfo);
       } else if (pack.path && pack.path.startsWith(devPackagesPath)) {
         packages.dev.push(packageInfo);
+      } else if (isBundled) {
+        packages.core.push(packageInfo);
       } else {
         packages.user.push(packageInfo);
       }

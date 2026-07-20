@@ -25,6 +25,97 @@ describe("PackageManager", function () {
     });
   });
 
+  describe("::getLocalPackages()", function () {
+    let [configDirPath, devPackagesPath] = [];
+
+    beforeEach(function () {
+      configDirPath = path.join(os.tmpdir(), "settings-view-config");
+      devPackagesPath = path.join(configDirPath, "dev", "packages");
+      spyOn(atom, "getConfigDirPath").andReturn(configDirPath);
+      spyOn(atom.packages, "loadPackageMetadata").andCallFake(
+        (pack) => pack.metadata || { name: pack.name },
+      );
+    });
+
+    function availablePackages(...packs) {
+      spyOn(atom.packages, "getAvailablePackages").andReturn(packs);
+    }
+
+    it("files a bundled package under core even when its isBundled flag is false (dev mode from source)", function () {
+      // Running in dev mode from a source checkout, every packages/ entry
+      // reports isBundled: false, but isBundledPackage() still identifies it.
+      availablePackages({
+        name: "tree-view",
+        path: path.join(path.sep, "app", "packages", "tree-view"),
+        isBundled: false,
+      });
+      spyOn(atom.packages, "isBundledPackage").andCallFake((name) => name === "tree-view");
+
+      const packages = packageManager.getLocalPackages();
+      expect(packages.core.map((p) => p.name)).toEqual(["tree-view"]);
+      expect(packages.user.map((p) => p.name)).toEqual([]);
+    });
+
+    it("files a community package under user", function () {
+      availablePackages({
+        name: "some-community-package",
+        path: path.join(configDirPath, "packages", "some-community-package"),
+        isBundled: false,
+      });
+      spyOn(atom.packages, "isBundledPackage").andReturn(false);
+
+      const packages = packageManager.getLocalPackages();
+      expect(packages.user.map((p) => p.name)).toEqual(["some-community-package"]);
+      expect(packages.core).toEqual([]);
+    });
+
+    it("files a dev/packages override of a bundled name under dev, not core", function () {
+      availablePackages({
+        name: "tree-view",
+        path: path.join(devPackagesPath, "tree-view"),
+        isBundled: false,
+      });
+      spyOn(atom.packages, "isBundledPackage").andReturn(true);
+
+      const packages = packageManager.getLocalPackages();
+      expect(packages.dev.map((p) => p.name)).toEqual(["tree-view"]);
+      expect(packages.core).toEqual([]);
+    });
+
+    it("files a git-sourced package under git", function () {
+      availablePackages({
+        name: "git-package",
+        path: path.join(configDirPath, "packages", "git-package"),
+        isBundled: false,
+        metadata: { name: "git-package", apmInstallSource: { type: "git" } },
+      });
+      spyOn(atom.packages, "isBundledPackage").andReturn(false);
+
+      const packages = packageManager.getLocalPackages();
+      expect(packages.git.map((p) => p.name)).toEqual(["git-package"]);
+    });
+
+    it("records directoryName for community but not bundled packages", function () {
+      availablePackages(
+        {
+          name: "tree-view",
+          path: path.join(path.sep, "app", "packages", "tree-view"),
+          isBundled: false,
+        },
+        {
+          name: "some-community-package",
+          path: path.join(configDirPath, "packages", "installed-as-other"),
+          isBundled: false,
+        },
+      );
+      spyOn(atom.packages, "isBundledPackage").andCallFake((name) => name === "tree-view");
+
+      const packages = packageManager.getLocalPackages();
+      expect(packages.core[0].directoryName).toBeUndefined();
+      expect(packages.user[0].directoryName).toBe("installed-as-other");
+    });
+  });
+
   describe("::getFeatured()", () =>
     it("does not query a package registry", function () {
       waitsForPromise(() =>
