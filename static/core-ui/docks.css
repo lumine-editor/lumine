@@ -150,7 +150,7 @@ atom-dock {
     align-items: center;
     cursor: pointer;
 
-    /* Promote to own layer, fixes rendering issue atom/atom#14915 */
+    /* Promote to its own compositing layer to avoid a rendering artifact */
     will-change: transform;
 
     &.right {
