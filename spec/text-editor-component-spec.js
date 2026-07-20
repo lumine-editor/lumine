@@ -3679,6 +3679,9 @@ describe("TextEditorComponent", () => {
         });
 
         element.style.width = "50px";
+        // Nudge the resize directly: macOS CI starves ResizeObserver, so relying
+        // on it to schedule the update leaves getNextUpdatePromise() unresolved.
+        component.didResize();
         await component.getNextUpdatePromise();
         assertLinesAreAlignedWithLineNumbers(component);
       }
@@ -3694,6 +3697,9 @@ describe("TextEditorComponent", () => {
       );
 
       element.style.width = "800px";
+      // Nudge the resize directly: macOS CI starves ResizeObserver, so relying
+      // on it to schedule the update leaves getNextUpdatePromise() unresolved.
+      component.didResize();
       await component.getNextUpdatePromise();
       expect(component.refs.blockDecorationMeasurementArea.offsetWidth).toBe(
         component.getScrollWidth(),
