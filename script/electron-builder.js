@@ -268,12 +268,9 @@ let options = {
   mac: {
     icon: ICONS.icns,
     category: "public.app-category.developer-tools",
-    // NOTE: Electron 27-32 use a version of Chromium whose minimum supported
-    // version of macOS is 10.15.
-    //
-    // Electron 33 will drop support for 10.15, at which point the minimum
-    // supported version will be macOS 11.
-    minimumSystemVersion: "10.15",
+    // NOTE: Electron 33 dropped support for macOS 10.15, so the minimum
+    // supported version is macOS 11. Lumine currently ships on Electron 43.
+    minimumSystemVersion: "11.0",
     hardenedRuntime: true,
     // Now that we're on a recent Electron, we no longer have to hide the
     // `allow-jit` entitlement from Intel Macs in order to work around a
@@ -288,8 +285,12 @@ let options = {
       NSRequiresAquaSystemAppearance: "NO",
       CFBundleDocumentTypes: macBundleDocumentTypes.create(),
       CFBundleURLTypes: [
-        { CFBundleURLSchemes: ["atom"] },
-        { CFBundleURLName: "Atom Shared Session Protocol" },
+        {
+          // The `atom://` scheme is a technical identifier baked throughout the
+          // source, so it stays; only the display name is branded.
+          CFBundleURLSchemes: ["atom"],
+          CFBundleURLName: "Lumine Shared Session Protocol",
+        },
       ],
     },
     extraResources: [],

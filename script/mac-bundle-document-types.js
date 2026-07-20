@@ -15,8 +15,6 @@
 
   But as we now build this for ourselves we will take advantage of our new methods
   and ensure we use the wins electron-builder provides by staying on platform.
-
-  @see https://github.com/atom/atom/blob/master/resources/mac/atom-Info.plist
 */
 
 /**
