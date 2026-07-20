@@ -1,6 +1,7 @@
 "use strict";
 
 const path = require("path");
+const fs = require("node:fs");
 // Electron 43 ships the synchronous Node SQLite API used by this adapter.
 // eslint-disable-next-line n/no-unsupported-features/node-builtins
 const { DatabaseSync } = require("node:sqlite");
@@ -13,6 +14,12 @@ module.exports = class SQLStateStore {
     const dbPath = path.join(storagePath, "session-store.db");
     let db;
     try {
+      // Ensure the storage directory exists before opening the database.
+      // Normally it is the config dir and already present, but it can be missing
+      // (a first run, or a test whose teardown removed its temp home), in which
+      // case `DatabaseSync` would throw and the store would silently stop
+      // persisting. Recreating it is a no-op when the directory already exists.
+      fs.mkdirSync(storagePath, { recursive: true });
       db = new DatabaseSync(dbPath);
       // Initialize inside the try so a transient failure (e.g. a WAL lock on the
       // shared session store) can't escape the constructor leaving a half-open
