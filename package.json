@@ -288,6 +288,7 @@
     "format:check": "prettier . --check",
     "test:editor": "yarn test:only spec",
     "test:pkgs": "yarn test:only packages",
+    "test:main": "yarn test:only --main-process spec/main-process",
     "test:only": "yarn start --test"
   },
   "devDependencies": {

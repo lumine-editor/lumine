@@ -119,6 +119,19 @@ jobs:
           elif command -v gtimeout >/dev/null 2>&1; then guard="gtimeout 2700"
           else guard=""; fi
           $guard $prefix yarn test:editor
+      # The main-process (Electron main) suite runs under Mocha in a single
+      # short session (a few seconds). Like the editor specs it runs once with a
+      # timeout guard; a failure here is a real regression, not a retry target.
+      - name: Run main-process specs
+        shell: bash
+        timeout-minutes: 15
+        run: |
+          prefix=""
+          if [ "$RUNNER_OS" = "Linux" ]; then prefix="xvfb-run --auto-servernum"; fi
+          if command -v timeout >/dev/null 2>&1; then guard="timeout 600"
+          elif command -v gtimeout >/dev/null 2>&1; then guard="gtimeout 600"
+          else guard=""; fi
+          $guard $prefix yarn test:main
       # Run each bundled package in its own Electron session. The combined
       # `yarn test:pkgs` session suffers cross-package state leakage (~200
       # spurious failures) and has hung CI runners; per-package isolation
