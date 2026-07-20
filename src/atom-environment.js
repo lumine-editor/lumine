@@ -39,6 +39,7 @@ const RepositoryRegistry = require("./repository-registry");
 const GitRepositoryOperationProvider = require("./git-repository-operation-provider");
 const GitAuthBroker = require("./git-auth-broker");
 const { promptForGitCredential } = require("./git-credential-dialog");
+const SecretStore = require("./secret-store");
 const Workspace = require("./workspace");
 const PaneContainer = require("./pane-container");
 const PaneAxis = require("./pane-axis");
@@ -177,6 +178,13 @@ class AtomEnvironment {
       new GitRepositoryOperationProvider({ authBroker: this.gitAuthBroker }),
       { fallback: true },
     );
+    // A forge-agnostic, OS-encrypted secret store (VS Code SecretStorage-style)
+    // for tokens and other sensitive strings packages must persist. Exposed as
+    // `atom.secrets`.
+    this.secrets = new SecretStore({
+      storagePath: path.join(this.getConfigDirPath(), "secret-store.json"),
+      notify: (message) => this.notifications.addWarning(message, { dismissable: true }),
+    });
     /** @type {Project} */
     this.project = new Project({
       notificationManager: this.notifications,
@@ -1134,6 +1142,7 @@ class AtomEnvironment {
     stopAllWatchers();
     GitHost.reset();
     if (this.gitAuthBroker) this.gitAuthBroker.terminate();
+    if (this.secrets) this.secrets.dispose();
     if (!this.project) return;
 
     this.storeWindowBackground();
