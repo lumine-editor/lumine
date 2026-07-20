@@ -333,6 +333,7 @@ let options = {
     "node_modules/github/bin/*",
     "node_modules/github/lib/*", // Resolves error in console
     "**/node_modules/spellchecker/**", // Matching Atom Glob
+    "**/node_modules/@vscode/ripgrep*/**", // rg binary must be spawnable outside asar
   ],
 };
 

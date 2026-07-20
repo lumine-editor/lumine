@@ -75,9 +75,13 @@ function updateTrailingContexts(message, pendingTrailingContexts, options) {
 }
 
 function cleanResultLine(resultLine) {
-  resultLine = getText(resultLine);
-
-  return resultLine[resultLine.length - 1] === "\n" ? resultLine.slice(0, -1) : resultLine;
+  // ripgrep reports each line including its terminator. Normalize CRLF so match and
+  // context text match the editor's line (which carries no `\r`) and downstream column
+  // math stays correct, then drop the single trailing terminator (which can be a lone
+  // `\r` once the `\n` has been split off for a multi-line match).
+  return getText(resultLine)
+    .replace(/\r\n/g, "\n")
+    .replace(/[\r\n]$/, "");
 }
 
 function getPositionFromColumn(lines, column) {
@@ -244,6 +248,10 @@ module.exports = class RipgrepDirectorySearcher {
       args.push("--multiline");
     }
 
+    // Match `$`/`^` at CRLF boundaries and keep `\r` out of match ranges on
+    // Windows-style files (VS Code parity). Harmless on LF-only files.
+    args.push("--crlf");
+
     if (options.includeHidden) {
       args.push("--hidden");
     }
@@ -266,6 +274,10 @@ module.exports = class RipgrepDirectorySearcher {
       cwd: directoryPath,
       stdio: ["pipe", "pipe", "pipe"],
     });
+    // Decode as UTF-8 so multibyte characters are never split across `data` chunk
+    // boundaries (Node's StringDecoder reassembles them).
+    child.stdout.setEncoding("utf8");
+    child.stderr.setEncoding("utf8");
 
     const didMatch = options.didMatch || (() => {});
     let cancelled = false;

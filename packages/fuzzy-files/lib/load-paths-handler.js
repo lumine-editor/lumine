@@ -32,7 +32,9 @@ class PathLoader {
       const args = ["--files", "--hidden", "--sort", "path"];
 
       if (!this.ignoreVcsIgnores) {
-        args.push("--no-ignore");
+        // Disable only VCS ignore files; still honor `.ignore`/`.rgignore`, matching
+        // project search's `--no-ignore-vcs` semantics.
+        args.push("--no-ignore-vcs");
       }
 
       if (this.traverseSymlinkDirectories) {
@@ -43,13 +45,14 @@ class PathLoader {
         args.push("-g", "!" + ignoredName.pattern);
       }
 
-      if (this.ignoreVcsIgnores) {
-        args.push("-g", "!.git");
-        args.push("-g", "!.hg");
-      }
+      // Never surface `.git`/`.hg` internals, regardless of the VCS-ignore setting.
+      args.push("-g", "!.git");
+      args.push("-g", "!.hg");
 
       let output = "";
       const result = childProcess.spawn(realRgPath, args, { cwd: this.rootPath });
+      // Decode as UTF-8 so multibyte characters in paths survive chunk boundaries.
+      result.stdout.setEncoding("utf8");
 
       result.stdout.on("data", (chunk) => {
         const files = (output + chunk).split("\n");

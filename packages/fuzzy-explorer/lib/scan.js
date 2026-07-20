@@ -24,17 +24,29 @@ module.exports = function (pattern, ignoredNames, followSymlinks, excludeVcsIgno
     return;
   }
 
-  const args = ["--files", "--hidden", "-g", search.include];
+  const args = ["--files", "--hidden"];
+  // A positive `-g` glob overrides ignore files in ripgrep, so only scope by the include
+  // glob when the user actually narrowed it. `**` means "everything under here" and must
+  // not silently defeat the VCS-ignore setting.
+  if (search.include !== "**") args.push("-g", search.include);
   if (followSymlinks) args.push("--follow");
-  if (!excludeVcsIgnoredPaths) args.push("--no-ignore");
+  // Disable only VCS ignore files; still honor `.ignore`/`.rgignore`, matching
+  // project search's `--no-ignore-vcs` semantics.
+  if (!excludeVcsIgnoredPaths) args.push("--no-ignore-vcs");
 
   for (const ignoredName of ignoredNames || []) {
     args.push("-g", `!${ignoredName}`);
   }
 
+  // Never surface `.git`/`.hg` internals, regardless of the VCS-ignore setting.
+  args.push("-g", "!.git");
+  args.push("-g", "!.hg");
+
   let output = "";
   const entries = [];
   const result = childProcess.spawn(realRgPath, args, { cwd: search.root });
+  // Decode as UTF-8 so multibyte characters in paths survive chunk boundaries.
+  result.stdout.setEncoding("utf8");
 
   result.stdout.on("data", (chunk) => {
     const files = (output + chunk).split(/\r?\n/);

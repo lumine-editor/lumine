@@ -2066,6 +2066,73 @@ describe("Workspace", () => {
           expect(results).toHaveLength(1);
         });
 
+        it("decodes multibyte matches split across ripgrep output chunks", async () => {
+          // A single line far larger than the OS pipe buffer forces ripgrep's JSON
+          // output to arrive in multiple stdout chunks; a 3-byte character guarantees a
+          // ~64 KB read boundary lands mid-character, which a naive Buffer->string
+          // concatenation would decode into U+FFFD.
+          const euro = "€"; // 3 bytes in UTF-8
+          const line = euro.repeat(100000);
+          const dir = temp.mkdirSync("ripgrep-utf8-");
+          fs.writeFileSync(path.join(dir, "big-utf8.txt"), line + "\n");
+          atom.project.setPaths([dir]);
+
+          const results = [];
+          await scan(new RegExp(euro + "+"), {}, (result) => results.push(result));
+
+          expect(results.length).toBe(1);
+          const { matches } = results[0];
+          expect(matches).toHaveLength(1);
+          expect(matches[0].matchText).not.toContain("�");
+          expect(matches[0].lineText).not.toContain("�");
+          expect(matches[0].matchText.length).toBe(line.length);
+          expect(matches[0].lineText.length).toBe(line.length);
+        });
+
+        it("matches end-anchored regexes on CRLF files without leaking `\\r`", async () => {
+          const dir = temp.mkdirSync("ripgrep-crlf-");
+          fs.writeFileSync(path.join(dir, "crlf.txt"), "alpha\r\naaa bbb\r\ngamma\r\n");
+          atom.project.setPaths([dir]);
+
+          const results = [];
+          // `$` only matches the CRLF line boundary when ripgrep runs with `--crlf`.
+          await scan(
+            /bbb$/,
+            { leadingContextLineCount: 1, trailingContextLineCount: 1 },
+            (result) => results.push(result),
+          );
+
+          expect(results.length).toBe(1);
+          const { matches } = results[0];
+          expect(matches).toHaveLength(1);
+          expect(matches[0].matchText).toBe("bbb");
+          expect(matches[0].lineText).toBe("aaa bbb");
+          expect(matches[0].leadingContextLines).toEqual(["alpha"]);
+          expect(matches[0].trailingContextLines).toEqual(["gamma"]);
+          for (const line of [
+            matches[0].lineText,
+            ...matches[0].leadingContextLines,
+            ...matches[0].trailingContextLines,
+          ]) {
+            expect(line).not.toContain("\r");
+          }
+        });
+
+        it("strips `\\r` from internal rows of multiline CRLF matches", async () => {
+          const dir = temp.mkdirSync("ripgrep-crlf-multiline-");
+          fs.writeFileSync(path.join(dir, "crlf-multi.txt"), "one\r\ntwo\r\nthree\r\n");
+          atom.project.setPaths([dir]);
+
+          const results = [];
+          await scan(/one\r?\ntwo/, {}, (result) => results.push(result));
+
+          expect(results.length).toBe(1);
+          const { matches } = results[0];
+          expect(matches).toHaveLength(1);
+          expect(matches[0].lineText).toBe("one\ntwo");
+          expect(matches[0].lineText).not.toContain("\r");
+        });
+
         if (ripgrep) {
           it("returns empty text matches", async () => {
             const results = [];
