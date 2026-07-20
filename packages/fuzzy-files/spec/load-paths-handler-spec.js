@@ -26,14 +26,17 @@ function relSet(dir, paths) {
 // The crawler is an Atom Task handler: it streams results through the global `emit` and
 // signals completion via `this.async()`. Drive it directly so the test exercises the
 // real `rg` invocation without the child-process indirection.
-function run(rootPath, { followSymlinks = false, ignoreVcsIgnores = true, ignores = [] } = {}) {
+function run(
+  rootPath,
+  { followSymlinks = false, excludeVcsIgnoredPaths = true, ignores = [] } = {},
+) {
   const collected = [];
   global.emit = (event, paths) => {
     if (event === "load-paths:paths-found") collected.push(...paths);
   };
   return new Promise((resolve) => {
     const fakeThis = { async: () => () => resolve(collected) };
-    loadPathsHandler.call(fakeThis, [rootPath], followSymlinks, ignoreVcsIgnores, ignores);
+    loadPathsHandler.call(fakeThis, [rootPath], followSymlinks, excludeVcsIgnoredPaths, ignores);
   });
 }
 
@@ -50,7 +53,7 @@ describe("fuzzy-files load-paths handler", () => {
 
   it("lists tracked files and hides VCS-ignored and .git contents by default", async () => {
     const dir = buildFixture();
-    const rels = relSet(dir, await run(dir, { ignoreVcsIgnores: true }));
+    const rels = relSet(dir, await run(dir, { excludeVcsIgnoredPaths: true }));
 
     expect(rels.has("visible.txt")).toBe(true);
     expect(rels.has("sub/nested.txt")).toBe(true);
@@ -61,7 +64,7 @@ describe("fuzzy-files load-paths handler", () => {
 
   it("reveals VCS-ignored files but still never descends into .git when the setting is off", async () => {
     const dir = buildFixture();
-    const rels = relSet(dir, await run(dir, { ignoreVcsIgnores: false }));
+    const rels = relSet(dir, await run(dir, { excludeVcsIgnoredPaths: false }));
 
     expect(rels.has("ignored.txt")).toBe(true);
     expect([...rels].some((r) => r.startsWith(".git/"))).toBe(false);
@@ -69,7 +72,7 @@ describe("fuzzy-files load-paths handler", () => {
 
   it("returns multibyte filenames intact", async () => {
     const dir = buildFixture();
-    const rels = relSet(dir, await run(dir, { ignoreVcsIgnores: true }));
+    const rels = relSet(dir, await run(dir, { excludeVcsIgnoredPaths: true }));
 
     expect(rels.has(UNICODE_NAME)).toBe(true);
     for (const rel of rels) {

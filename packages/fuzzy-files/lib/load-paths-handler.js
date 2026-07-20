@@ -18,9 +18,15 @@ const MaxConcurrentCrawls = Math.min(Math.max(os.cpus().length - 1, 1), 8);
 // Crawls a single project root with ripgrep. ripgrep honors `.gitignore`
 // natively (unless `--no-ignore` is passed), so no VCS integration is needed.
 class PathLoader {
-  constructor(rootPath, ignoreVcsIgnores, traverseSymlinkDirectories, ignoredNames, emittedPaths) {
+  constructor(
+    rootPath,
+    excludeVcsIgnoredPaths,
+    traverseSymlinkDirectories,
+    ignoredNames,
+    emittedPaths,
+  ) {
     this.rootPath = rootPath;
-    this.ignoreVcsIgnores = ignoreVcsIgnores;
+    this.excludeVcsIgnoredPaths = excludeVcsIgnoredPaths;
     this.traverseSymlinkDirectories = traverseSymlinkDirectories;
     this.ignoredNames = ignoredNames;
     this.emittedPaths = emittedPaths;
@@ -31,7 +37,7 @@ class PathLoader {
     return new Promise((resolve) => {
       const args = ["--files", "--hidden", "--sort", "path"];
 
-      if (!this.ignoreVcsIgnores) {
+      if (!this.excludeVcsIgnoredPaths) {
         // Disable only VCS ignore files; still honor `.ignore`/`.rgignore`, matching
         // project search's `--no-ignore-vcs` semantics.
         args.push("--no-ignore-vcs");
@@ -89,7 +95,7 @@ class PathLoader {
   }
 }
 
-module.exports = function (rootPaths, followSymlinks, ignoreVcsIgnores, ignores) {
+module.exports = function (rootPaths, followSymlinks, excludeVcsIgnoredPaths, ignores) {
   const emittedPaths = new Set();
   const ignoredNames = [];
   for (let ignore of ignores) {
@@ -106,9 +112,13 @@ module.exports = function (rootPaths, followSymlinks, ignoreVcsIgnores, ignores)
     rootPaths,
     MaxConcurrentCrawls,
     (rootPath, next) =>
-      new PathLoader(rootPath, ignoreVcsIgnores, followSymlinks, ignoredNames, emittedPaths).load(
-        next,
-      ),
+      new PathLoader(
+        rootPath,
+        excludeVcsIgnoredPaths,
+        followSymlinks,
+        ignoredNames,
+        emittedPaths,
+      ).load(next),
     this.async(),
   );
 };

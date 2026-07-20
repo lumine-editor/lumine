@@ -8,7 +8,7 @@ module.exports = {
     const followSymlinks = atom.config.get("core.followSymlinks");
     let ignoredNames = atom.config.get("fuzzy-files.ignoredNames") || [];
     ignoredNames = ignoredNames.concat(atom.config.get("core.ignoredNames") || []);
-    const ignoreVcsIgnores = atom.config.get("core.excludeVcsIgnoredPaths");
+    const excludeVcsIgnoredPaths = atom.config.get("core.excludeVcsIgnoredPaths");
     const projectPaths = atom.project.getPaths().map((path) => fs.realpathSync(path));
 
     const startTime = performance.now();
@@ -17,7 +17,7 @@ module.exports = {
       taskPath,
       projectPaths,
       followSymlinks,
-      ignoreVcsIgnores,
+      excludeVcsIgnoredPaths,
       ignoredNames,
       () => {
         callback(results);
