@@ -62,6 +62,12 @@ module.exports = function start(resourcePath, devResourcePath, startTime) {
     return;
   }
 
+  // Seed a fresh `ATOM_HOME` from the bundled default config template. This has
+  // to happen before the compile cache and crash reporter below, since both
+  // create `ATOM_HOME` as a side effect and would otherwise leave a new install
+  // unseeded.
+  atomPaths.seedUserConfig(args.resourcePath);
+
   // Persist V8 bytecode of compiled modules across launches to speed up startup.
   require("module").enableCompileCache?.(
     path.resolve(process.env.ATOM_HOME, "compile-cache", "v8"),

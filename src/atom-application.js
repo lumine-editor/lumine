@@ -229,8 +229,6 @@ module.exports = class AtomApplication extends EventEmitter {
     this.waitSessionsByWindow = new Map();
     this.windowStack = new WindowStack();
 
-    this.initializeAtomHome(process.env.ATOM_HOME);
-
     let configFilePath = getConfigFilePath({ returnPlaceholder: true });
 
     this.configFile = ConfigFile.at(configFilePath);
@@ -969,13 +967,6 @@ module.exports = class AtomApplication extends EventEmitter {
           },
         ]),
       );
-    }
-  }
-
-  initializeAtomHome(configDirPath) {
-    if (!fs.existsSync(configDirPath)) {
-      const templateConfigDirPath = fs.resolve(this.resourcePath, "dot-atom");
-      fs.copySync(templateConfigDirPath, configDirPath);
     }
   }
 

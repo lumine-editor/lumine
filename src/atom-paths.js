@@ -64,5 +64,22 @@ module.exports = {
     }
   },
 
+  // Seed a brand-new `ATOM_HOME` with the bundled default config (`dot-atom`:
+  // init script, keymap, snippets, styles, packages README). This must run
+  // before anything else — the compile cache and crash reporter both create
+  // `ATOM_HOME` as a side effect, which would otherwise defeat the "does the
+  // config folder exist yet?" check and leave a fresh install unseeded.
+  seedUserConfig: (resourcePath) => {
+    const configDirPath = process.env.ATOM_HOME;
+    if (fs.existsSync(configDirPath)) {
+      return;
+    }
+
+    const templateConfigDirPath = fs.resolve(resourcePath, "dot-atom");
+    if (templateConfigDirPath) {
+      fs.copySync(templateConfigDirPath, configDirPath);
+    }
+  },
+
   getAppDirectory,
 };
