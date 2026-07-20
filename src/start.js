@@ -50,7 +50,7 @@ module.exports = function start(resourcePath, devResourcePath, startTime) {
   }
 
   const releaseChannel = getReleaseChannel(app.getVersion());
-  process.env.ATOM_CHANNEL ??= releaseChannel;
+  process.env.LUMINE_CHANNEL ??= releaseChannel;
   atomPaths.setAtomHome(app.getPath("home"));
   atomPaths.setUserData(app);
 
@@ -62,20 +62,20 @@ module.exports = function start(resourcePath, devResourcePath, startTime) {
     return;
   }
 
-  // Seed a fresh `ATOM_HOME` from the bundled default config template. This has
+  // Seed a fresh `LUMINE_HOME` from the bundled default config template. This has
   // to happen before the compile cache and crash reporter below, since both
-  // create `ATOM_HOME` as a side effect and would otherwise leave a new install
+  // create `LUMINE_HOME` as a side effect and would otherwise leave a new install
   // unseeded.
   atomPaths.seedUserConfig(args.resourcePath);
 
   // Persist V8 bytecode of compiled modules across launches to speed up startup.
   require("module").enableCompileCache?.(
-    path.resolve(process.env.ATOM_HOME, "compile-cache", "v8"),
+    path.resolve(process.env.LUMINE_HOME, "compile-cache", "v8"),
   );
 
-  // Now that we can be sure `ATOM_HOME` is set, we can set our custom crash
+  // Now that we can be sure `LUMINE_HOME` is set, we can set our custom crash
   // dump path.
-  app.setPath("crashDumps", path.resolve(process.env.ATOM_HOME, "crashdumps"));
+  app.setPath("crashDumps", path.resolve(process.env.LUMINE_HOME, "crashdumps"));
 
   // By default, we're using the crash reporter on Windows and Linux, but not
   // macOS. That's because:

@@ -43,7 +43,7 @@ module.exports = function parseCommandLine(processArgs) {
       LUMINE_RESOURCE_PATH    The path from which Lumine loads source code in dev mode.
                               Defaults to \`~/github/atom\`.
 
-      ATOM_HOME               The root path for all configuration files and folders.
+      LUMINE_HOME               The root path for all configuration files and folders.
                               Defaults to \`~/.lumine\`.`,
   );
   options.alias("d", "dev").boolean("d").describe("d", "Run in development mode.");

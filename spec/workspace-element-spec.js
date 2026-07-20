@@ -1218,13 +1218,13 @@ describe("WorkspaceElement", () => {
       const projectPath = temp.mkdirSync("dir1-");
       atom.project.setPaths([projectPath]);
       workspaceElement.runPackageSpecs({
-        env: { ATOM_GITHUB_BABEL_ENV: "coverage" },
+        env: { LUMINE_GITHUB_BABEL_ENV: "coverage" },
       });
 
       expect(ipcRenderer.send).toHaveBeenCalledWith(
         "run-package-specs",
         path.join(projectPath, "spec"),
-        { env: { ATOM_GITHUB_BABEL_ENV: "coverage" } },
+        { env: { LUMINE_GITHUB_BABEL_ENV: "coverage" } },
       );
     });
   });

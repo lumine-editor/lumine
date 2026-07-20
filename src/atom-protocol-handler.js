@@ -18,11 +18,11 @@ module.exports = class AtomProtocolHandler {
     this.loadPaths = [];
 
     if (!safeMode) {
-      this.loadPaths.push(path.join(process.env.ATOM_HOME, "dev", "packages"));
+      this.loadPaths.push(path.join(process.env.LUMINE_HOME, "dev", "packages"));
       this.loadPaths.push(path.join(resourcePath, "packages"));
     }
 
-    this.loadPaths.push(path.join(process.env.ATOM_HOME, "packages"));
+    this.loadPaths.push(path.join(process.env.LUMINE_HOME, "packages"));
     this.loadPaths.push(path.join(resourcePath, "node_modules"));
 
     this.registerAtomProtocol();
@@ -35,7 +35,7 @@ module.exports = class AtomProtocolHandler {
 
       let filePath;
       if (relativePath.indexOf("assets/") === 0) {
-        const assetsPath = path.join(process.env.ATOM_HOME, relativePath);
+        const assetsPath = path.join(process.env.LUMINE_HOME, relativePath);
         try {
           const stat = fs.statSync(assetsPath);
           if (stat && stat.isFile()) filePath = assetsPath;

@@ -469,8 +469,8 @@
               expect(fatalError.issue.getPackageName()).toBe("notifications");
               button = fatalError.querySelector(".btn");
               expect(button.textContent).toContain("Create issue on the notifications package");
-              expect(issueTitle).toContain("$ATOM_HOME");
-              expect(issueTitle).not.toContain(process.env.ATOM_HOME);
+              expect(issueTitle).toContain("$LUMINE_HOME");
+              expect(issueTitle).not.toContain(process.env.LUMINE_HOME);
               expect(issueBody).toMatch(/Lumine\*\*: [0-9].[0-9]+.[0-9]+/gi);
               expect(issueBody).not.toMatch(/Unknown/gi);
               expect(issueBody).toContain("ReferenceError: a is not defined");
@@ -1063,7 +1063,7 @@
                 issuesResponse: {
                   items: [
                     {
-                      title: "ReferenceError: a is not defined in $ATOM_HOME/somewhere",
+                      title: "ReferenceError: a is not defined in $LUMINE_HOME/somewhere",
                       html_url: "http://url.com/ok",
                       state: "open",
                     },
@@ -1102,7 +1102,7 @@
                 issuesResponse: {
                   items: [
                     {
-                      title: "ReferenceError: a is not defined in $ATOM_HOME/somewhere",
+                      title: "ReferenceError: a is not defined in $LUMINE_HOME/somewhere",
                       html_url: "http://url.com/closed",
                       state: "closed",
                     },

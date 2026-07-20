@@ -45,7 +45,7 @@ module.exports = function ({ blobStore }) {
     window,
     document,
     blobStore,
-    configDirPath: process.env.ATOM_HOME,
+    configDirPath: process.env.LUMINE_HOME,
     env: process.env,
   });
 

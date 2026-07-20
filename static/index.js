@@ -36,11 +36,11 @@
       // Persist V8 bytecode of compiled modules across launches to speed up
       // startup (supported replacement for the removed native-compile-cache).
       require("module").enableCompileCache?.(
-        path.join(process.env.ATOM_HOME, "compile-cache", "v8"),
+        path.join(process.env.LUMINE_HOME, "compile-cache", "v8"),
       );
 
       const FileSystemBlobStore = require("../src/file-system-blob-store");
-      blobStore = FileSystemBlobStore.load(path.join(process.env.ATOM_HOME, "blob-store"));
+      blobStore = FileSystemBlobStore.load(path.join(process.env.LUMINE_HOME, "blob-store"));
 
       if (getWindowLoadSettings().profileStartup) {
         profileStartup(Date.now() - startTime);
@@ -74,7 +74,7 @@
 
   function setupWindow() {
     const CompileCache = require("../src/compile-cache");
-    CompileCache.setAtomHomeDirectory(process.env.ATOM_HOME);
+    CompileCache.setAtomHomeDirectory(process.env.LUMINE_HOME);
     CompileCache.install(process.resourcesPath, require);
 
     const ModuleCache = require("../src/module-cache");
@@ -135,15 +135,15 @@
   }
 
   function setupAtomHome() {
-    if (process.env.ATOM_HOME) {
+    if (process.env.LUMINE_HOME) {
       return;
     }
 
-    // Ensure ATOM_HOME is always set before anything else is required
+    // Ensure LUMINE_HOME is always set before anything else is required
     // This is because of a difference in Linux not inherited between browser and render processes
     // https://github.com/atom/atom/issues/5412
     if (getWindowLoadSettings() && getWindowLoadSettings().atomHome) {
-      process.env.ATOM_HOME = getWindowLoadSettings().atomHome;
+      process.env.LUMINE_HOME = getWindowLoadSettings().atomHome;
     }
   }
 })();

@@ -180,7 +180,7 @@ export default class InstallPanel {
               <a className="link" onclick={this.didClickOpenAtomIo.bind(this)}>
                 GitHub
               </a>
-              <span> and are installed to {path.join(process.env.ATOM_HOME, "packages")}</span>
+              <span> and are installed to {path.join(process.env.LUMINE_HOME, "packages")}</span>
             </div>
 
             <div className="sub-section catalog-sources">

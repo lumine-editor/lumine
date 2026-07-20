@@ -9,7 +9,7 @@ module.exports = class LessCompileCache {
     lessSourcesByRelativeFilePath,
     importedFilePathsByRelativeImportPath,
   }) {
-    const cacheDir = path.join(process.env.ATOM_HOME, "compile-cache", "less");
+    const cacheDir = path.join(process.env.LUMINE_HOME, "compile-cache", "less");
     this.lessSearchPaths = [
       path.join(resourcePath, "static", "variables"),
       path.join(resourcePath, "static"),

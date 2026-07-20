@@ -17,11 +17,11 @@ const CSON = require("@lumine-code/season");
 const { resolvePackageSource } = require("./package-source");
 
 function packagesDirectory() {
-  return path.join(process.env.ATOM_HOME, "packages");
+  return path.join(process.env.LUMINE_HOME, "packages");
 }
 
 function devPackagesDirectory() {
-  return path.join(process.env.ATOM_HOME, "dev", "packages");
+  return path.join(process.env.LUMINE_HOME, "dev", "packages");
 }
 
 function gitCommand() {

@@ -182,7 +182,7 @@ module.exports = {
       accept: "application/json",
       contentType: "application/json",
     });
-    const apiURL = process.env.ATOM_API_URL || "https://api.pulsar-edit.dev/api";
+    const apiURL = process.env.LUMINE_API_URL || "https://api.pulsar-edit.dev/api";
     return fetch(`${apiURL}/${packageName}`, { headers: githubHeaders }).then((r) => {
       if (r.ok) {
         return r.json();

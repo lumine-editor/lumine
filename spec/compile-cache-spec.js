@@ -32,7 +32,7 @@ describe("CompileCache", () => {
   });
 
   afterEach(() => {
-    CompileCache.setAtomHomeDirectory(process.env.ATOM_HOME);
+    CompileCache.setAtomHomeDirectory(process.env.LUMINE_HOME);
     CSON.setCacheDir(CompileCache.getCacheDirectory());
     try {
       temp.cleanupSync();

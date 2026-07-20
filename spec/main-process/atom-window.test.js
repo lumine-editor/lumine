@@ -33,9 +33,9 @@ describe("AtomWindow", function () {
 
     beforeEach(async function () {
       original = {
-        ATOM_HOME: process.env.ATOM_HOME,
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT:
-          process.env.ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT,
+        LUMINE_HOME: process.env.LUMINE_HOME,
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT:
+          process.env.LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT,
       };
 
       resourcePath = path.resolve(__dirname, "../..");
@@ -70,14 +70,14 @@ describe("AtomWindow", function () {
         });
       });
 
-      process.env.ATOM_HOME = atomHome;
-      process.env.ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT = "true";
+      process.env.LUMINE_HOME = atomHome;
+      process.env.LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT = "true";
     });
 
     afterEach(async function () {
-      process.env.ATOM_HOME = original.ATOM_HOME;
-      process.env.ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT =
-        original.ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT;
+      process.env.LUMINE_HOME = original.LUMINE_HOME;
+      process.env.LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT =
+        original.LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT;
     });
 
     it("creates a real, properly configured BrowserWindow", async function () {

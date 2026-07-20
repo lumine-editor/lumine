@@ -714,7 +714,7 @@ const buildConsoleReporter = (logFile) => {
     timer: new Timer(),
   };
 
-  if (process.env.ATOM_JASMINE_REPORTER === "list") {
+  if (process.env.LUMINE_JASMINE_REPORTER === "list") {
     return new ListReporter(options);
   } else {
     const reporter = new ConsoleReporter();

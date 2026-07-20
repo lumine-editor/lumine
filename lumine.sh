@@ -11,17 +11,17 @@ else
   exit 1
 fi
 
-ATOM_BASE_NAME=$(basename $0)
-ATOM_BASE_NAME=${ATOM_BASE_NAME%.*}
+LUMINE_BASE_NAME=$(basename $0)
+LUMINE_BASE_NAME=${LUMINE_BASE_NAME%.*}
 CHANNEL=stable
 # Capture the name of this script so that we can use it at runtime.
-export ATOM_BASE_NAME
-export ATOM_CHANNEL=$CHANNEL
+export LUMINE_BASE_NAME
+export LUMINE_CHANNEL=$CHANNEL
 
-# Only infer ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT when the caller has not
+# Only infer LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT when the caller has not
 # set it explicitly. AppImages use this same script for terminal and desktop
 # launches, so the embedded desktop file cannot always provide the distinction.
-if [ -z "${ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT+x}" ]
+if [ -z "${LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT+x}" ]
 then
   if [ -n "${APPIMAGE:-}" ] &&
      [ ! -t 0 ] && [ ! -t 1 ] && [ ! -t 2 ] &&
@@ -29,14 +29,14 @@ then
   then
     # A standalone AppImage launched without a terminal needs the user's login
     # shell environment, just like a launch through the desktop file.
-    export ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT=false
+    export LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT=false
   else
-    export ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT=true
+    export LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT=true
   fi
 fi
 
-ATOM_ADD=false
-ATOM_NEW_WINDOW=false
+LUMINE_ADD=false
+LUMINE_NEW_WINDOW=false
 EXIT_CODE_OVERRIDE=
 
 while getopts ":anwtfvh-:" opt; do
@@ -44,10 +44,10 @@ while getopts ":anwtfvh-:" opt; do
     -)
       case "${OPTARG}" in
         add)
-          ATOM_ADD=true
+          LUMINE_ADD=true
           ;;
         new-window)
-          ATOM_NEW_WINDOW=true
+          LUMINE_NEW_WINDOW=true
           ;;
         wait)
           WAIT=1
@@ -67,10 +67,10 @@ while getopts ":anwtfvh-:" opt; do
       esac
       ;;
     a)
-      ATOM_ADD=true
+      LUMINE_ADD=true
       ;;
     n)
-      ATOM_NEW_WINDOW=true
+      LUMINE_NEW_WINDOW=true
       ;;
     w)
       WAIT=1
@@ -81,7 +81,7 @@ while getopts ":anwtfvh-:" opt; do
   esac
 done
 
-if [ "${ATOM_ADD}" = "true" ] && [ "${ATOM_NEW_WINDOW}" = "true" ]; then
+if [ "${LUMINE_ADD}" = "true" ] && [ "${LUMINE_NEW_WINDOW}" = "true" ]; then
   EXPECT_OUTPUT=1
   EXIT_CODE_OVERRIDE=1
 fi
@@ -90,13 +90,13 @@ if [ $REDIRECT_STDERR ]; then
   exec 2> /dev/null
 fi
 
-# Keep a different $ATOM_HOME for each release channel.
-if [ -z "$ATOM_HOME" ]
+# Keep a different $LUMINE_HOME for each release channel.
+if [ -z "$LUMINE_HOME" ]
 then
-  ATOM_HOME="$HOME/.${ATOM_BASE_NAME}"
+  LUMINE_HOME="$HOME/.${LUMINE_BASE_NAME}"
 fi
-mkdir -p "$ATOM_HOME"
-export ATOM_HOME
+mkdir -p "$LUMINE_HOME"
+export LUMINE_HOME
 
 if [ $OS == 'Mac' ]; then
   if [ -L "$0" ]; then
@@ -104,65 +104,65 @@ if [ $OS == 'Mac' ]; then
   else
     SCRIPT="$(realpath "$0")"
   fi
-  ATOM_APP="$(dirname "$(dirname "$(dirname "$SCRIPT")")")"
+  LUMINE_APP="$(dirname "$(dirname "$(dirname "$SCRIPT")")")"
 
-  # If this is a `lumine.sh` from a built version of Lumine, then `$ATOM_APP`
+  # If this is a `lumine.sh` from a built version of Lumine, then `$LUMINE_APP`
   # should now be the path to the user's instance of Lumine.app.
-  if [[ "$ATOM_APP" == . || "$ATOM_APP" != *".app" ]]; then
+  if [[ "$LUMINE_APP" == . || "$LUMINE_APP" != *".app" ]]; then
     # This is a `lumine.sh` that's in the source code of Lumine or has been
     # copied to a location outside of the app (instead of symlinked). We'll try
     # another tactic.
-    unset ATOM_APP
+    unset LUMINE_APP
   else
     # We found the location of the Lumine.app that this script lives in.
-    LUMINE_PATH="$(dirname "$ATOM_APP")"
-    ATOM_APP_NAME="$(basename "$ATOM_APP")"
+    LUMINE_PATH="$(dirname "$LUMINE_APP")"
+    LUMINE_APP_NAME="$(basename "$LUMINE_APP")"
   fi
 
-  if [ -n "${ATOM_APP_NAME}" ]; then
-    # If ATOM_APP_NAME is known, use it as the executable name
-    ATOM_EXECUTABLE_NAME="${ATOM_APP_NAME%.*}"
+  if [ -n "${LUMINE_APP_NAME}" ]; then
+    # If LUMINE_APP_NAME is known, use it as the executable name
+    LUMINE_EXECUTABLE_NAME="${LUMINE_APP_NAME%.*}"
   else
-    ATOM_EXECUTABLE_NAME="Lumine"
-    ATOM_APP_NAME="${ATOM_EXECUTABLE_NAME}.app"
+    LUMINE_EXECUTABLE_NAME="Lumine"
+    LUMINE_APP_NAME="${LUMINE_EXECUTABLE_NAME}.app"
   fi
 
   if [ -z "${LUMINE_PATH}" ]; then
     # If LUMINE_PATH isn't set, check /Applications and then ~/Applications for
     # Lumine.app.
-    if [ -x "/Applications/${ATOM_APP_NAME}" ]; then
+    if [ -x "/Applications/${LUMINE_APP_NAME}" ]; then
       LUMINE_PATH="/Applications"
-    elif [ -x "$HOME/Applications/${ATOM_APP_NAME}" ]; then
+    elif [ -x "$HOME/Applications/${LUMINE_APP_NAME}" ]; then
       LUMINE_PATH="$HOME/Applications"
     else
       # We still haven't found it. Let's try searching for it via
       # Spotlight.
-      LUMINE_APP_SEARCH_RESULT="$(mdfind "kMDItemCFBundleIdentifier == 'io.github.lumine-code.${ATOM_BASE_NAME}'" | grep -v ShipIt | head -1)"
+      LUMINE_APP_SEARCH_RESULT="$(mdfind "kMDItemCFBundleIdentifier == 'io.github.lumine-code.${LUMINE_BASE_NAME}'" | grep -v ShipIt | head -1)"
       if [ ! -z "$LUMINE_APP_SEARCH_RESULT" ]; then
         LUMINE_PATH="$(dirname "$LUMINE_APP_SEARCH_RESULT")"
-        ATOM_APP_NAME="$(basename "$LUMINE_APP_SEARCH_RESULT")"
+        LUMINE_APP_NAME="$(basename "$LUMINE_APP_SEARCH_RESULT")"
       fi
     fi
   fi
 
-  LUMINE_EXECUTABLE="$LUMINE_PATH/$ATOM_APP_NAME/Contents/MacOS/$ATOM_EXECUTABLE_NAME"
+  LUMINE_EXECUTABLE="$LUMINE_PATH/$LUMINE_APP_NAME/Contents/MacOS/$LUMINE_EXECUTABLE_NAME"
 
   # Exit if Lumine can't be found.
   if [ ! -x "${LUMINE_EXECUTABLE}" ]; then
-    echoerr "Cannot locate ${ATOM_APP_NAME}; it is usually located in /Applications. Set the LUMINE_PATH environment variable to the directory containing ${ATOM_APP_NAME}."
+    echoerr "Cannot locate ${LUMINE_APP_NAME}; it is usually located in /Applications. Set the LUMINE_PATH environment variable to the directory containing ${LUMINE_APP_NAME}."
     exit 1
   fi
 
   if [ $EXPECT_OUTPUT ]; then
     "$LUMINE_EXECUTABLE" --executed-from="$(pwd)" --pid=$$ "$@"
-    ATOM_EXIT=$?
-    if [ ${ATOM_EXIT} -eq 0 ] && [ -n "${EXIT_CODE_OVERRIDE}" ]; then
+    LUMINE_EXIT=$?
+    if [ ${LUMINE_EXIT} -eq 0 ] && [ -n "${EXIT_CODE_OVERRIDE}" ]; then
       exit "${EXIT_CODE_OVERRIDE}"
     else
-      exit ${ATOM_EXIT}
+      exit ${LUMINE_EXIT}
     fi
   else
-    open -a "$LUMINE_PATH/$ATOM_APP_NAME" -n -g --args --executed-from="$(pwd)" --pid=$$ --path-environment="$PATH" "$@"
+    open -a "$LUMINE_PATH/$LUMINE_APP_NAME" -n -g --args --executed-from="$(pwd)" --pid=$$ --path-environment="$PATH" "$@"
   fi
 elif [ $OS == 'Linux' ]; then
 
@@ -171,12 +171,12 @@ elif [ $OS == 'Linux' ]; then
 
   # We think that
   #
-  # * `ATOM_APP_NAME` will refer to the human-readable app name (“Lumine”)
-  # * `ATOM_EXECUTABLE_NAME` will refer to the executable we must run to launch
+  # * `LUMINE_APP_NAME` will refer to the human-readable app name (“Lumine”)
+  # * `LUMINE_EXECUTABLE_NAME` will refer to the executable we must run to launch
   #   it (`lumine`)
 
-  ATOM_EXECUTABLE_NAME=$ATOM_BASE_NAME
-  ATOM_APP_NAME="Lumine"
+  LUMINE_EXECUTABLE_NAME=$LUMINE_BASE_NAME
+  LUMINE_APP_NAME="Lumine"
 
   # If `LUMINE_PATH` is set by the user, we'll assume they know what they're
   # doing. Otherwise we should try to find it ourselves.
@@ -193,46 +193,46 @@ elif [ $OS == 'Linux' ]; then
 
     # The `lumine.sh` file lives one directory deeper than the root directory
     # that contains the `lumine` binary.
-    ATOM_APP="$(dirname "$(dirname "$SCRIPT")")"
-    LUMINE_PATH="$(realpath "$ATOM_APP")"
+    LUMINE_APP="$(dirname "$(dirname "$SCRIPT")")"
+    LUMINE_PATH="$(realpath "$LUMINE_APP")"
 
-    if [ ! -f "$LUMINE_PATH/${ATOM_EXECUTABLE_NAME}" ]; then
+    if [ ! -f "$LUMINE_PATH/${LUMINE_EXECUTABLE_NAME}" ]; then
       # If that path doesn't contain a `lumine` executable, then it's not a
       # valid path. We'll try something else.
-      unset ATOM_APP
+      unset LUMINE_APP
       unset LUMINE_PATH
     fi
 
     if [ -z "${LUMINE_PATH}" ]; then
-      if [ -f "/opt/${ATOM_APP_NAME}/${ATOM_EXECUTABLE_NAME}" ]; then
+      if [ -f "/opt/${LUMINE_APP_NAME}/${LUMINE_EXECUTABLE_NAME}" ]; then
         # Check the default installation directory for RPM and DEB
         # distributions.
-        LUMINE_PATH="/opt/${ATOM_APP_NAME}"
-      elif [ -f "$TMPDIR/lumine-build/${ATOM_APP_NAME}/${ATOM_EXECUTABLE_NAME}" ]; then
+        LUMINE_PATH="/opt/${LUMINE_APP_NAME}"
+      elif [ -f "$TMPDIR/lumine-build/${LUMINE_APP_NAME}/${LUMINE_EXECUTABLE_NAME}" ]; then
         # This is where Lumine can be found during some CI build tasks.
-        LUMINE_PATH="$TMPDIR/lumine-build/${ATOM_APP_NAME}"
+        LUMINE_PATH="$TMPDIR/lumine-build/${LUMINE_APP_NAME}"
       else
-        echoerr "Cannot locate ${ATOM_APP_NAME}. Set the LUMINE_PATH environment variable to the directory containing the \`${ATOM_BASE_NAME}\` executable."
+        echoerr "Cannot locate ${LUMINE_APP_NAME}. Set the LUMINE_PATH environment variable to the directory containing the \`${LUMINE_BASE_NAME}\` executable."
         exit 1
       fi
     fi
   fi
 
-  LUMINE_EXECUTABLE="$LUMINE_PATH/$ATOM_EXECUTABLE_NAME"
+  LUMINE_EXECUTABLE="$LUMINE_PATH/$LUMINE_EXECUTABLE_NAME"
 
   if [ $EXPECT_OUTPUT ]; then
     "$LUMINE_EXECUTABLE" --executed-from="$(pwd)" --pid=$$ "$@" --no-sandbox
-    ATOM_EXIT=$?
-    if [ ${ATOM_EXIT} -eq 0 ] && [ -n "${EXIT_CODE_OVERRIDE}" ]; then
+    LUMINE_EXIT=$?
+    if [ ${LUMINE_EXIT} -eq 0 ] && [ -n "${EXIT_CODE_OVERRIDE}" ]; then
       exit "${EXIT_CODE_OVERRIDE}"
     else
-      exit ${ATOM_EXIT}
+      exit ${LUMINE_EXIT}
     fi
   else
     (
-    nohup "$LUMINE_EXECUTABLE" --executed-from="$(pwd)" --pid=$$ "$@" --no-sandbox > "$ATOM_HOME/nohup.out" 2>&1
+    nohup "$LUMINE_EXECUTABLE" --executed-from="$(pwd)" --pid=$$ "$@" --no-sandbox > "$LUMINE_HOME/nohup.out" 2>&1
     if [ $? -ne 0 ]; then
-      cat "$ATOM_HOME/nohup.out"
+      cat "$LUMINE_HOME/nohup.out"
       exit $?
     fi
     ) &
@@ -247,7 +247,7 @@ trap 'on_die' SIGQUIT SIGTERM
 
 # If the wait flag is set, don't exit this process until Lumine kills it.
 if [ $WAIT ]; then
-  WAIT_FIFO="$ATOM_HOME/.wait_fifo"
+  WAIT_FIFO="$LUMINE_HOME/.wait_fifo"
 
   if [ ! -p "$WAIT_FIFO" ]; then
     rm -f "$WAIT_FIFO"

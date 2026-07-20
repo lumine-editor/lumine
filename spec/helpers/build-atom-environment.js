@@ -2,7 +2,7 @@ const fs = require("@lumine-code/fs-plus");
 const temp = require("temp");
 const path = require("path");
 
-const userHome = process.env.ATOM_HOME || path.join(fs.getHomeDirectory(), ".atom");
+const userHome = process.env.LUMINE_HOME || path.join(fs.getHomeDirectory(), ".atom");
 const atomHome = temp.mkdirSync({ prefix: "atom-test-home-" });
 if (process.env.APM_TEST_PACKAGES) {
   const testPackages = process.env.APM_TEST_PACKAGES.split(/\s+/);

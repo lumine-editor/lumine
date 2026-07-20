@@ -38,27 +38,27 @@ describe("updateProcessEnv(launchEnv)", function () {
         WILL_BE_DELETED: "hi",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       };
 
       const initialProcessEnv = process.env;
 
       await updateProcessEnv({
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         PWD: "/the/dir",
         TERM: "xterm-something",
         KEY1: "value1",
         KEY2: "value2",
       });
       expect(process.env).toEqual({
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         PWD: "/the/dir",
         TERM: "xterm-something",
         KEY1: "value1",
         KEY2: "value2",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       });
 
       // See #11302. On Windows, `process.env` is a magic object that offers
@@ -72,25 +72,25 @@ describe("updateProcessEnv(launchEnv)", function () {
         WILL_BE_DELETED: "hi",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       };
 
       const initialProcessEnv = process.env;
 
       await updateProcessEnv({
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         PROMPT: "$P$G",
         KEY1: "value1",
         KEY2: "value2",
       });
       expect(process.env).toEqual({
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         PROMPT: "$P$G",
         KEY1: "value1",
         KEY2: "value2",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       });
 
       // See #11302. On Windows, `process.env` is a magic object that offers
@@ -104,27 +104,27 @@ describe("updateProcessEnv(launchEnv)", function () {
         WILL_BE_DELETED: "hi",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       };
 
       const initialProcessEnv = process.env;
 
       await updateProcessEnv({
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         PSModulePath:
           "C:\\Program Files\\WindowsPowerShell\\Modules;C:\\WINDOWS\\system32\\WindowsPowerShell\\v1.0\\Modules\\",
         KEY1: "value1",
         KEY2: "value2",
       });
       expect(process.env).toEqual({
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         PSModulePath:
           "C:\\Program Files\\WindowsPowerShell\\Modules;C:\\WINDOWS\\system32\\WindowsPowerShell\\v1.0\\Modules\\",
         KEY1: "value1",
         KEY2: "value2",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       });
 
       // See #11302. On Windows, `process.env` is a magic object that offers
@@ -133,90 +133,90 @@ describe("updateProcessEnv(launchEnv)", function () {
       expect(process.env).toBe(initialProcessEnv);
     });
 
-    it("allows ATOM_HOME to be overwritten only if the new value is a valid path", async function () {
+    it("allows LUMINE_HOME to be overwritten only if the new value is a valid path", async function () {
       let newAtomHomePath = temp.mkdirSync("atom-home");
 
       process.env = {
         WILL_BE_DELETED: "hi",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       };
 
       await updateProcessEnv({
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         PWD: "/the/dir",
       });
       expect(process.env).toEqual({
         PWD: "/the/dir",
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       });
 
       await updateProcessEnv({
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         PWD: "/the/dir",
-        ATOM_HOME: path.join(newAtomHomePath, "non-existent"),
+        LUMINE_HOME: path.join(newAtomHomePath, "non-existent"),
       });
       expect(process.env).toEqual({
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         PWD: "/the/dir",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       });
 
       await updateProcessEnv({
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         PWD: "/the/dir",
-        ATOM_HOME: newAtomHomePath,
+        LUMINE_HOME: newAtomHomePath,
       });
       expect(process.env).toEqual({
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         PWD: "/the/dir",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: newAtomHomePath,
+        LUMINE_HOME: newAtomHomePath,
       });
     });
 
-    it("allows ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT to be preserved if set", async function () {
+    it("allows LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT to be preserved if set", async function () {
       process.env = {
         WILL_BE_DELETED: "hi",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       };
 
       await updateProcessEnv({
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         PWD: "/the/dir",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       });
       expect(process.env).toEqual({
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         PWD: "/the/dir",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       });
 
       await updateProcessEnv({
         PWD: "/the/dir",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       });
       expect(process.env).toEqual({
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         PWD: "/the/dir",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       });
     });
 
@@ -225,18 +225,18 @@ describe("updateProcessEnv(launchEnv)", function () {
         WILL_BE_UPDATED: "old-value",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
       };
 
       await updateProcessEnv(process.env);
       expect(process.env).toEqual(process.env);
 
       let updatedEnv = {
-        ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+        LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
         WILL_BE_UPDATED: "new-value",
         NODE_ENV: "the-node-env",
         NODE_PATH: "/the/node/path",
-        ATOM_HOME: "/the/atom/home",
+        LUMINE_HOME: "/the/atom/home",
         PWD: "/the/dir",
       };
 
@@ -347,14 +347,14 @@ describe("updateProcessEnv(launchEnv)", function () {
         process.platform = "darwin";
         expect(
           shouldGetEnvFromShell({
-            ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+            LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
             SHELL: "/bin/sh",
           }),
         ).toBe(false);
         process.platform = "linux";
         expect(
           shouldGetEnvFromShell({
-            ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
+            LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT: "true",
             SHELL: "/bin/sh",
           }),
         ).toBe(false);

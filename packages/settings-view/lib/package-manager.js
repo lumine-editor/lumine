@@ -404,7 +404,7 @@ module.exports = class PackageManager {
   }
 
   getAtomPackagesDirectory() {
-    return path.join(process.env.ATOM_HOME, "packages");
+    return path.join(process.env.LUMINE_HOME, "packages");
   }
 
   getGitCommand() {
@@ -656,7 +656,7 @@ module.exports = class PackageManager {
 
   getLocalPackages() {
     const packages = { dev: [], user: [], core: [], git: [] };
-    const configDirPath = atom.getConfigDirPath ? atom.getConfigDirPath() : process.env.ATOM_HOME;
+    const configDirPath = atom.getConfigDirPath ? atom.getConfigDirPath() : process.env.LUMINE_HOME;
     const devPackagesPath = path.join(configDirPath, "dev", "packages");
 
     for (const pack of atom.packages.getAvailablePackages()) {

@@ -26,10 +26,10 @@ module.exports = class CommandInstaller {
   getScriptBaseName() {
     if (this.scriptBaseName) {
       return this.scriptBaseName;
-    } else if (process.env.ATOM_BASE_NAME) {
+    } else if (process.env.LUMINE_BASE_NAME) {
       // If we launched via shell script, this environment variable will tell
       // us the right name.
-      return process.env.ATOM_BASE_NAME;
+      return process.env.LUMINE_BASE_NAME;
     }
 
     // Otherwise fall back to the default executable name.

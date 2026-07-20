@@ -30,30 +30,30 @@ module.exports = {
     const portableHomePath = path.join(getAppDirectory(), "..", ".lumine");
     if (fs.existsSync(portableHomePath)) {
       if (hasWriteAccess(portableHomePath)) {
-        process.env.ATOM_HOME = portableHomePath;
+        process.env.LUMINE_HOME = portableHomePath;
       } else {
         // A path exists so it was intended to be used but we didn't have rights, so warn.
         console.log(`Insufficient permission to portable Lumine home "${portableHomePath}".`);
       }
     }
 
-    // Check the `ATOM_HOME` environment variable next.
-    if (process.env.ATOM_HOME !== undefined) {
+    // Check the `LUMINE_HOME` environment variable next.
+    if (process.env.LUMINE_HOME !== undefined) {
       return;
     }
 
     // We fall back to a `.lumine` folder in the user's home folder.
     //
-    // On macOS and Linux, `ATOM_HOME` gets set in `lumine.sh`, so we'd only get
+    // On macOS and Linux, `LUMINE_HOME` gets set in `lumine.sh`, so we'd only get
     // this far if the user launched via a non-shell method. On Windows, we
-    // don’t try to set `ATOM_HOME` in `lumine.cmd`, so we'll always get this
+    // don’t try to set `LUMINE_HOME` in `lumine.cmd`, so we'll always get this
     // far.
     //
-    process.env.ATOM_HOME = path.join(homePath, ".lumine");
+    process.env.LUMINE_HOME = path.join(homePath, ".lumine");
   },
 
   setUserData: (app) => {
-    const electronUserDataPath = path.join(process.env.ATOM_HOME, "electronUserData");
+    const electronUserDataPath = path.join(process.env.LUMINE_HOME, "electronUserData");
     if (fs.existsSync(electronUserDataPath)) {
       if (hasWriteAccess(electronUserDataPath)) {
         app.setPath("userData", electronUserDataPath);
@@ -64,13 +64,13 @@ module.exports = {
     }
   },
 
-  // Seed a brand-new `ATOM_HOME` with the bundled default config (`dot-atom`:
+  // Seed a brand-new `LUMINE_HOME` with the bundled default config (`dot-atom`:
   // init script, keymap, snippets, styles, packages README). This must run
   // before anything else — the compile cache and crash reporter both create
-  // `ATOM_HOME` as a side effect, which would otherwise defeat the "does the
+  // `LUMINE_HOME` as a side effect, which would otherwise defeat the "does the
   // config folder exist yet?" check and leave a fresh install unseeded.
   seedUserConfig: (resourcePath) => {
-    const configDirPath = process.env.ATOM_HOME;
+    const configDirPath = process.env.LUMINE_HOME;
     if (fs.existsSync(configDirPath)) {
       return;
     }

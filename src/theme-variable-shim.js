@@ -97,7 +97,7 @@ function generateShimSources(properties, { includeUi = true, includeSyntax = tru
 }
 
 // Write the shim files for the given theme set into
-// `<ATOM_HOME>/compile-cache/theme-shims/<label>-<hash>/` and prune shim
+// `<LUMINE_HOME>/compile-cache/theme-shims/<label>-<hash>/` and prune shim
 // directories left over from previous palette versions of the same label.
 // Only the sides provided by modern themes are written (a legacy theme in the
 // pair provides its own Less variables file, which precedes the shim on the
@@ -110,7 +110,7 @@ function writeShimDirectory(label, paletteCssText, options = {}) {
   const contents = Object.values(sources).join("");
   const hash = crypto.createHash("sha1").update(contents).digest("hex").slice(0, 12);
 
-  const shimsRoot = path.join(process.env.ATOM_HOME, "compile-cache", "theme-shims");
+  const shimsRoot = path.join(process.env.LUMINE_HOME, "compile-cache", "theme-shims");
   const shimDir = path.join(shimsRoot, `${label}-${hash}`);
 
   if (!fs.isDirectorySync(shimDir)) {

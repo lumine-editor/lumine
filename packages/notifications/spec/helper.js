@@ -16,7 +16,7 @@ bug report purposes.
         return a + 1;
       } catch (error) {
         e = error;
-        errMsg = e.toString() + " in " + process.env.ATOM_HOME + "/somewhere";
+        errMsg = e.toString() + " in " + process.env.LUMINE_HOME + "/somewhere";
         return window.onerror.call(window, errMsg, "/dev/null", 2, 3, e);
       }
     },

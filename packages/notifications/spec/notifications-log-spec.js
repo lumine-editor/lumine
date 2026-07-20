@@ -222,7 +222,7 @@
               issuesResponse: {
                 items: [
                   {
-                    title: "ReferenceError: a is not defined in $ATOM_HOME/somewhere",
+                    title: "ReferenceError: a is not defined in $LUMINE_HOME/somewhere",
                     html_url: "http://url.com/ok",
                     state: "open",
                   },

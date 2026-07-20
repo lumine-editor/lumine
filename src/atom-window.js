@@ -106,7 +106,7 @@ module.exports = class AtomWindow extends EventEmitter {
     this.loadSettings.appVersion = app.getVersion();
     this.loadSettings.appName = getAppName();
     this.loadSettings.resourcePath = this.resourcePath;
-    this.loadSettings.atomHome = process.env.ATOM_HOME;
+    this.loadSettings.atomHome = process.env.LUMINE_HOME;
     if (this.loadSettings.devMode == null) this.loadSettings.devMode = false;
     if (this.loadSettings.safeMode == null) this.loadSettings.safeMode = false;
     if (this.loadSettings.clearWindowState == null) this.loadSettings.clearWindowState = false;
@@ -349,17 +349,17 @@ module.exports = class AtomWindow extends EventEmitter {
     const {
       NODE_ENV,
       NODE_PATH,
-      ATOM_HOME,
-      ATOM_CHANNEL,
-      ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT,
+      LUMINE_HOME,
+      LUMINE_CHANNEL,
+      LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT,
     } = env;
 
     this.sendToRenderer("environment", {
       NODE_ENV,
       NODE_PATH,
-      ATOM_HOME,
-      ATOM_CHANNEL,
-      ATOM_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT,
+      LUMINE_HOME,
+      LUMINE_CHANNEL,
+      LUMINE_DISABLE_SHELLING_OUT_FOR_ENVIRONMENT,
     });
   }
 

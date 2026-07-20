@@ -27,14 +27,14 @@ const ConfigSchema = require("./config-schema");
 const LocationSuffixRegExp = /(:\d+)(:\d+)?$/;
 const WINDOW_EVENT_CHANNEL = "window-event";
 
-// Increment this when changing the serialization format of `${ATOM_HOME}/storage/application.json` used by
+// Increment this when changing the serialization format of `${LUMINE_HOME}/storage/application.json` used by
 // AtomApplication::saveCurrentWindowOptions() and AtomApplication::loadPreviousWindowOptions() in a backward-
 // incompatible way.
 const APPLICATION_STATE_VERSION = "1";
 
 const getSocketSecretPath = (applicationVersion) => {
   const { username } = os.userInfo();
-  const atomHome = path.resolve(process.env.ATOM_HOME);
+  const atomHome = path.resolve(process.env.LUMINE_HOME);
 
   return path.join(atomHome, `.lumine-socket-secret-${username}-${applicationVersion}`);
 };
@@ -245,9 +245,9 @@ module.exports = class AtomApplication extends EventEmitter {
     });
 
     this.fileRecoveryService = new FileRecoveryService(
-      path.join(process.env.ATOM_HOME, "recovery"),
+      path.join(process.env.LUMINE_HOME, "recovery"),
     );
-    this.storageFolder = new StorageFolder(process.env.ATOM_HOME);
+    this.storageFolder = new StorageFolder(process.env.LUMINE_HOME);
 
     this.disposable = new CompositeDisposable();
     this.handleEvents();
@@ -1523,7 +1523,7 @@ module.exports = class AtomApplication extends EventEmitter {
       const PackageManager = require("./package-manager");
       this.packages = new PackageManager({});
       this.packages.initialize({
-        configDirPath: process.env.ATOM_HOME,
+        configDirPath: process.env.LUMINE_HOME,
         devMode,
         resourcePath: this.resourcePath,
       });

@@ -1272,8 +1272,8 @@ class LaunchScenario {
         }
       });
     });
-    this.originalAtomHome = process.env.ATOM_HOME;
-    process.env.ATOM_HOME = this.atomHome;
+    this.originalAtomHome = process.env.LUMINE_HOME;
+    process.env.LUMINE_HOME = this.atomHome;
 
     await Promise.all(
       ["a", "b", "c", "d"].map(
@@ -1483,7 +1483,7 @@ class LaunchScenario {
     await Promise.all(Array.from(this.applications, (app) => app.destroy()));
 
     if (this.originalAtomHome) {
-      process.env.ATOM_HOME = this.originalAtomHome;
+      process.env.LUMINE_HOME = this.originalAtomHome;
     }
   }
 

@@ -7,29 +7,29 @@ describe("get-app-details", () => {
   let originalAtomHome;
 
   beforeEach(() => {
-    originalAtomHome = process.env.ATOM_HOME;
-    process.env.ATOM_HOME = temp.mkdirSync("lumine-config-");
+    originalAtomHome = process.env.LUMINE_HOME;
+    process.env.LUMINE_HOME = temp.mkdirSync("lumine-config-");
   });
 
   afterEach(() => {
     if (originalAtomHome == null) {
-      delete process.env.ATOM_HOME;
+      delete process.env.LUMINE_HOME;
     } else {
-      process.env.ATOM_HOME = originalAtomHome;
+      process.env.LUMINE_HOME = originalAtomHome;
     }
   });
 
   it("uses config.json as the default path", () => {
     expect(getConfigFilePath()).toBeNull();
     expect(getConfigFilePath({ returnPlaceholder: true })).toBe(
-      path.join(process.env.ATOM_HOME, "config.json"),
+      path.join(process.env.LUMINE_HOME, "config.json"),
     );
   });
 
   it("prefers JSON and JSONC while retaining CSON support", () => {
-    const csonPath = path.join(process.env.ATOM_HOME, "config.cson");
-    const jsoncPath = path.join(process.env.ATOM_HOME, "config.jsonc");
-    const jsonPath = path.join(process.env.ATOM_HOME, "config.json");
+    const csonPath = path.join(process.env.LUMINE_HOME, "config.cson");
+    const jsoncPath = path.join(process.env.LUMINE_HOME, "config.jsonc");
+    const jsonPath = path.join(process.env.LUMINE_HOME, "config.json");
 
     fs.writeFileSync(csonPath, "core: telemetryConsent: 'no'");
     expect(getConfigFilePath()).toBe(csonPath);

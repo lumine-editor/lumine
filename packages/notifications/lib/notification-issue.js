@@ -92,7 +92,7 @@ module.exports = class NotificationIssue {
 
   getIssueTitle() {
     let title = this.notification.getMessage();
-    title = title.replace(process.env.ATOM_HOME, "$ATOM_HOME");
+    title = title.replace(process.env.LUMINE_HOME, "$LUMINE_HOME");
     if (process.platform === "win32") {
       title = title.replace(process.env.USERPROFILE, "~");
       title = title.replace(path.sep, path.posix.sep); // Standardize issue titles

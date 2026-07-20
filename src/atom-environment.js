@@ -1543,7 +1543,7 @@ or use Pane::saveItemAs for programmatic saving.`);
   }
 
   getConfigDirPath() {
-    if (!this.configDirPath) this.configDirPath = process.env.ATOM_HOME;
+    if (!this.configDirPath) this.configDirPath = process.env.LUMINE_HOME;
     return this.configDirPath;
   }
 
