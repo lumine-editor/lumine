@@ -771,6 +771,14 @@ module.exports = class PackageManager {
       return Promise.resolve(pack);
     }
 
+    // Respect the user's `core.disabledPackages` choice. The batch load path
+    // (loadPackages) filters disabled packages out before they can be
+    // activated, but a direct activatePackage() call routes through the
+    // singular loadPackage(), which does not, so guard it here.
+    if (this.isPackageDisabled(name)) {
+      return Promise.reject(new Error(`Cannot activate disabled package '${name}'`));
+    }
+
     pack = this.loadPackage(name);
     if (!pack) {
       return Promise.reject(new Error(`Failed to load package '${name}'`));

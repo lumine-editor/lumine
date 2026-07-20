@@ -893,6 +893,41 @@ describe("PackageManager", () => {
       });
     });
 
+    describe("when the package is disabled", () => {
+      it("rejects the promise without loading or activating the package", async () => {
+        atom.config.set("core.disabledPackages", ["package-with-main"]);
+        expect(atom.packages.isPackageDisabled("package-with-main")).toBe(true);
+
+        let rejection;
+        try {
+          await atom.packages.activatePackage("package-with-main");
+          expect("Error to be thrown").toBe("");
+        } catch (error) {
+          rejection = error;
+        }
+
+        expect(rejection.message).toContain("Cannot activate disabled package 'package-with-main'");
+        expect(atom.packages.isPackageLoaded("package-with-main")).toBe(false);
+        expect(atom.packages.isPackageActive("package-with-main")).toBe(false);
+      });
+
+      it("still surfaces unrelated load failures when the package is not disabled", async () => {
+        spyOn(console, "warn");
+        atom.config.set("core.disabledPackages", ["some-other-package"]);
+        expect(atom.packages.isPackageDisabled("this-doesnt-exist")).toBe(false);
+
+        let rejection;
+        try {
+          await atom.packages.activatePackage("this-doesnt-exist");
+          expect("Error to be thrown").toBe("");
+        } catch (error) {
+          rejection = error;
+        }
+
+        expect(rejection.message).toContain("Failed to load package 'this-doesnt-exist'");
+      });
+    });
+
     describe("keymap loading", () => {
       describe("when the metadata does not contain a 'keymaps' manifest", () => {
         it("loads all supported object files in the keymaps directory", async () => {
