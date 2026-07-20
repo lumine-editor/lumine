@@ -13,6 +13,7 @@
   --title-bar-dev-indicator-color: var(--text-color-error);
   --title-bar-safe-indicator-color: var(--text-color-success);
   --title-bar-source-indicator-color: var(--text-color-info);
+  --title-bar-mode-dot-size: 11px;
 
   /* Menu */
   --title-bar-menu-font-size: var(--font-size);
@@ -142,18 +143,25 @@
       height: auto;
     }
 
+    /* Launch-mode badge: a filled dot sitting on the logo's lower-right edge */
     &::after {
       content: "";
       display: none;
       position: absolute;
       top: 50%;
       left: 50%;
-      width: calc(100% + 5px);
-      aspect-ratio: 1;
+      width: var(--title-bar-mode-dot-size);
+      height: var(--title-bar-mode-dot-size);
       box-sizing: border-box;
-      border: 1.5px solid currentColor;
+      background-color: currentColor;
+      border: 1.5px solid var(--app-background-color);
       border-radius: 50%;
-      transform: translate(-50%, -50%);
+      /* Anchor the dot's centre onto the circular logo's edge at ~45°
+         (icon-size/2 / √2 ≈ icon-size * 0.354 from the logo centre). */
+      transform: translate(
+        calc(-50% + var(--title-bar-icon-size) * 0.354),
+        calc(-50% + var(--title-bar-icon-size) * 0.354)
+      );
     }
 
     &.dev-mode::after {
