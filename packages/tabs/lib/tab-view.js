@@ -24,6 +24,13 @@ class TabView {
     this.itemTitle.classList.add("title");
     this.element.appendChild(this.itemTitle);
 
+    // Dedicated status marker, decoupled from the close button so toggling a
+    // modified/deleted/conflicted status never disturbs the close button's own
+    // hover animation. Purely CSS-driven off the tab's status classes.
+    this.statusIcon = document.createElement("div");
+    this.statusIcon.classList.add("tab-status");
+    this.element.appendChild(this.statusIcon);
+
     if (
       location === "center" ||
       !(typeof this.item.isPermanentDockItem === "function"

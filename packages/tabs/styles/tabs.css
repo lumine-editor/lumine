@@ -63,59 +63,83 @@
     }
 
     /* Status indicator — owned by the tabs package so it renders consistently
-       across UI themes rather than each theme reimplementing it. When a tab has
-       a status and is not hovered, the close-icon becomes a small round dot with
-       a left-to-right gradient: the LEFT edge marks unsaved changes
-       (modified = blue) and the RIGHT edge marks the file's on-disk status
-       (deleted = red, conflict = yellow). With a single status both ends take
-       the same color, so it reads as one solid dot; with two statuses it blends
-       across (e.g. modified + deleted = blue → red). Hovering restores the close
-       button. The two ends are driven by --tab-dot-left / --tab-dot-right, set
-       by the state rules below (ordered so deleted wins over conflict). */
-    &.modified:not(:hover) .close-icon,
-    &.deleted:not(:hover) .close-icon,
-    &.conflicted:not(:hover) .close-icon {
-      --tab-dot-left: transparent;
-      --tab-dot-right: transparent;
-      &::before {
-        display: none;
-      }
+       across UI themes rather than each theme reimplementing it. It is a
+       DEDICATED element (.tab-status), decoupled from the close button. An
+       earlier version restyled the ✕ itself, which briefly flashed the ✕ when a
+       status cleared because the theme animated its transform back into view.
+       Keeping them separate means status changes never touch the ✕, so the
+       theme's hover animation is fully preserved. The marker has two concentric
+       parts:
+         - a filled DOT (the ::before) marks unsaved changes
+           (modified = accent color);
+         - a RING (its own border) marks the file's on-disk status
+           (deleted = removed color, conflict = modified color).
+       A single status shows just its part (a lone dot, or a lone ring); the two
+       combined nest the dot inside the ring (e.g. modified + deleted). It shows
+       only while the tab has a status and is not hovered; hovering hides it and
+       the theme reveals the ✕ as usual. Colors are driven by --tab-dot-color /
+       --tab-ring-color (deleted declared after conflict so it wins). */
+    .tab-status {
+      display: none;
+    }
+
+    &.modified:not(:hover) .tab-status,
+    &.deleted:not(:hover) .tab-status,
+    &.conflicted:not(:hover) .tab-status {
+      --tab-dot-color: transparent;
+      --tab-ring-color: transparent;
       position: absolute;
-      top: 11px;
+      top: 0;
+      bottom: 0;
       right: 11px;
+      /* Center in the tab regardless of its height: top/bottom 0 + auto
+         top/bottom margins split the leftover space evenly. */
+      margin: auto 0;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      box-sizing: border-box;
       width: 8px;
       height: 8px;
       padding: 0;
-      transform: scale(0.7);
-      border: none;
+      border: 1px solid var(--tab-ring-color);
       border-radius: 50%;
-      overflow: hidden;
       background-color: transparent;
-      background-image: linear-gradient(to right, var(--tab-dot-left), var(--tab-dot-right));
+      pointer-events: none;
+
+      &::before {
+        content: "";
+        display: block;
+        width: 6px;
+        height: 6px;
+        border-radius: 50%;
+        background-color: var(--tab-dot-color);
+      }
     }
 
-    /* Modified fills both halves (a solid blue dot when it is the only status). */
-    &.modified:not(:hover) .close-icon {
-      --tab-dot-left: var(--text-color-info);
-      --tab-dot-right: var(--text-color-info);
-    }
-
-    /* Conflict paints the status (right) half yellow — and the whole dot when
-       the buffer is unmodified. */
+    /* Hide the ✕ while the marker is showing (the active tab's ✕ is otherwise
+       always visible). Uses visibility, not the theme's animated transform, so
+       clearing a status snaps the ✕ back with no flicker. */
+    &.modified:not(:hover) .close-icon,
+    &.deleted:not(:hover) .close-icon,
     &.conflicted:not(:hover) .close-icon {
-      --tab-dot-right: var(--text-color-warning);
-    }
-    &.conflicted:not(.modified):not(:hover) .close-icon {
-      --tab-dot-left: var(--text-color-warning);
+      visibility: hidden;
     }
 
-    /* Deleted paints the status (right) half red (declared after conflict so it
-       wins) — and the whole dot when the buffer is unmodified. */
-    &.deleted:not(:hover) .close-icon {
-      --tab-dot-right: var(--text-color-error);
+    /* Modified: a filled dot in the accent color. */
+    &.modified:not(:hover) .tab-status {
+      --tab-dot-color: var(--accent-color);
     }
-    &.deleted:not(.modified):not(:hover) .close-icon {
-      --tab-dot-left: var(--text-color-error);
+
+    /* Conflict: a ring in the modified color. */
+    &.conflicted:not(:hover) .tab-status {
+      --tab-ring-color: var(--text-color-modified);
+    }
+
+    /* Deleted: a ring in the removed color (declared after conflict so it wins
+       when both are somehow set). */
+    &.deleted:not(:hover) .tab-status {
+      --tab-ring-color: var(--text-color-removed);
     }
   }
 
