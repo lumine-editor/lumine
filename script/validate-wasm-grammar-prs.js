@@ -1,5 +1,5 @@
 /*
- * This script is called via `validate-wasm-grammar-prs.yml`
+ * This script is called via `validate-wasm-grammars.yml`
  * It's purpose is to ensure that everytime a `.wasm` file is changed in a PR
  * That the `parserSource` key or WASM build metadata of the grammar that uses
  * that specific `.wasm` file is also updated. This way we can ensure that the
