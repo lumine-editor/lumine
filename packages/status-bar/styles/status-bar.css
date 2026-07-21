@@ -98,14 +98,12 @@ status-bar {
   }
 
   .hide,
-  .current-path:empty,
-  .cursor-position:empty,
-  .selection-count:empty {
+  .current-path:empty {
     display: none;
   }
 
-  .cursor-position a,
-  .cursor-position a:hover {
+  .editor-position a,
+  .editor-position a:hover {
     color: var(--text-color);
   }
 }

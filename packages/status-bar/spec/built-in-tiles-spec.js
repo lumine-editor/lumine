@@ -16,15 +16,13 @@ describe("Built-in Status Bar Tiles", function () {
   });
 
   describe("the file info, cursor and selection tiles", function () {
-    let [editor, buffer, fileInfo, cursorPosition, selectionCount] = [];
+    let [editor, buffer, fileInfo, editorPosition] = [];
 
     beforeEach(function () {
       waitsForPromise(() => atom.workspace.open("sample.js"));
 
       runs(function () {
-        [fileInfo, cursorPosition, selectionCount] = statusBar
-          .getLeftTiles()
-          .map((tile) => tile.getItem());
+        [fileInfo, editorPosition] = statusBar.getLeftTiles().map((tile) => tile.getItem());
         editor = atom.workspace.getActiveTextEditor();
         return (buffer = editor.getBuffer());
       });
@@ -37,8 +35,7 @@ describe("Built-in Status Bar Tiles", function () {
         runs(function () {
           atom.views.performDocumentUpdate();
           expect(fileInfo.currentPath.textContent).toBe("untitled");
-          expect(cursorPosition.textContent).toBe("1:1");
-          expect(selectionCount).toBeHidden();
+          expect(editorPosition.textContent).toBe("1:1");
         });
       }));
 
@@ -262,7 +259,7 @@ describe("Built-in Status Bar Tiles", function () {
         jasmine.attachToDOM(workspaceElement);
         editor.setCursorScreenPosition([1, 2]);
         atom.views.performDocumentUpdate();
-        expect(cursorPosition.textContent).toBe("2:3");
+        expect(editorPosition.textContent).toBe("2:3");
       });
 
       it("does not throw an exception if the cursor is moved as the result of the active pane item changing to a non-editor (regression)", function () {
@@ -273,18 +270,18 @@ describe("Built-in Status Bar Tiles", function () {
         waitsForPromise(() => atom.packages.activatePackage("status-bar"));
         runs(function () {
           statusBar = workspaceElement.querySelector("status-bar");
-          cursorPosition = statusBar.getLeftTiles()[2].getItem();
+          editorPosition = statusBar.getLeftTiles()[1].getItem();
 
           atom.workspace.getActivePane().activateItem(document.createElement("div"));
           expect(editor.getCursorScreenPosition()).toEqual([1, 2]);
           atom.views.performDocumentUpdate();
-          expect(cursorPosition).toBeHidden();
+          expect(editorPosition).toBeHidden();
         });
       });
     });
 
     describe("when the associated editor's selection changes", function () {
-      it("updates the selection count in the status bar", function () {
+      it("appends the selection size to the cursor position in the status bar", function () {
         jasmine.attachToDOM(workspaceElement);
 
         editor.setSelectedBufferRange([
@@ -292,21 +289,43 @@ describe("Built-in Status Bar Tiles", function () {
           [0, 0],
         ]);
         atom.views.performDocumentUpdate();
-        expect(selectionCount.textContent).toBe("");
+        expect(editorPosition.textContent).toBe("1:1");
 
         editor.setSelectedBufferRange([
           [0, 0],
           [0, 2],
         ]);
         atom.views.performDocumentUpdate();
-        expect(selectionCount.textContent).toBe("(1, 2)");
+        expect(editorPosition.textContent).toBe("1:3:1:2");
 
         editor.setSelectedBufferRange([
           [0, 0],
           [1, 30],
         ]);
         atom.views.performDocumentUpdate();
-        expect(selectionCount.textContent).toBe("(2, 60)");
+        expect(editorPosition.textContent).toBe("2:31:2:60");
+      });
+
+      it("appends the cursor count when there is more than one cursor", function () {
+        jasmine.attachToDOM(workspaceElement);
+
+        editor.setCursorBufferPosition([0, 0]);
+        editor.addCursorAtBufferPosition([1, 2]);
+        atom.views.performDocumentUpdate();
+        expect(editorPosition.textContent).toBe("2:3 #2");
+
+        editor.setSelectedBufferRanges([
+          [
+            [0, 0],
+            [0, 1],
+          ],
+          [
+            [1, 0],
+            [1, 3],
+          ],
+        ]);
+        atom.views.performDocumentUpdate();
+        expect(editorPosition.textContent).toBe("2:4:1:3 #2");
       });
 
       it("does not throw an exception if the cursor is moved as the result of the active pane item changing to a non-editor (regression)", function () {
@@ -322,7 +341,7 @@ describe("Built-in Status Bar Tiles", function () {
         waitsForPromise(() => atom.packages.activatePackage("status-bar"));
         runs(function () {
           statusBar = workspaceElement.querySelector("status-bar");
-          selectionCount = statusBar.getLeftTiles()[2].getItem();
+          editorPosition = statusBar.getLeftTiles()[1].getItem();
 
           atom.workspace.getActivePane().activateItem(document.createElement("div"));
           expect(editor.getSelectedBufferRange()).toEqual([
@@ -330,17 +349,17 @@ describe("Built-in Status Bar Tiles", function () {
             [1, 3],
           ]);
           atom.views.performDocumentUpdate();
-          expect(selectionCount).toBeHidden();
+          expect(editorPosition).toBeHidden();
         });
       });
     });
 
     describe("when the active pane item does not implement getCursorBufferPosition()", () =>
-      it("hides the cursor position view", function () {
+      it("hides the editor position view", function () {
         jasmine.attachToDOM(workspaceElement);
         atom.workspace.getActivePane().activateItem(dummyView);
         atom.views.performDocumentUpdate();
-        expect(cursorPosition).toBeHidden();
+        expect(editorPosition).toBeHidden();
       }));
 
     describe("when the active pane item implements getTitle() but not getPath()", () =>
@@ -379,63 +398,60 @@ describe("Built-in Status Bar Tiles", function () {
         expect(fileInfo.currentPath.textContent).toBe("New Title");
       }));
 
-    describe("the cursor position tile", function () {
-      beforeEach(() => atom.config.set("status-bar.cursorPositionFormat", "foo %L bar %C"));
-
-      it("respects a format string", function () {
+    describe("the editor position tile", function () {
+      it("respects the position format string", function () {
+        atom.config.set("status-bar.positionFormat", "foo %L bar %C");
         jasmine.attachToDOM(workspaceElement);
         editor.setCursorScreenPosition([1, 2]);
         atom.views.performDocumentUpdate();
-        expect(cursorPosition.textContent).toBe("foo 2 bar 3");
+        expect(editorPosition.textContent).toBe("foo 2 bar 3");
       });
 
-      it("updates when the configuration changes", function () {
+      it("updates when the position format configuration changes", function () {
+        atom.config.set("status-bar.positionFormat", "foo %L bar %C");
         jasmine.attachToDOM(workspaceElement);
         editor.setCursorScreenPosition([1, 2]);
         atom.views.performDocumentUpdate();
-        expect(cursorPosition.textContent).toBe("foo 2 bar 3");
+        expect(editorPosition.textContent).toBe("foo 2 bar 3");
 
-        atom.config.set("status-bar.cursorPositionFormat", "baz %C quux %L");
+        atom.config.set("status-bar.positionFormat", "baz %C quux %L");
         atom.views.performDocumentUpdate();
-        expect(cursorPosition.textContent).toBe("baz 3 quux 2");
+        expect(editorPosition.textContent).toBe("baz 3 quux 2");
       });
 
-      describe("when clicked", () =>
-        it("triggers the go-to-line toggle event", function () {
-          const eventHandler = jasmine.createSpy("eventHandler");
-          atom.commands.add("atom-text-editor", "go-to-line:toggle", eventHandler);
-          cursorPosition.click();
-          expect(eventHandler).toHaveBeenCalled();
-        }));
-    });
-
-    describe("the selection count tile", function () {
-      beforeEach(() =>
-        atom.config.set("status-bar.selectionCountFormat", "%L foo %C bar selected"),
-      );
-
-      it("respects a format string", function () {
+      it("respects the selection format string", function () {
+        atom.config.set("status-bar.selectionFormat", " %L foo %C bar selected");
         jasmine.attachToDOM(workspaceElement);
         editor.setSelectedBufferRange([
           [0, 0],
           [1, 30],
         ]);
         atom.views.performDocumentUpdate();
-        expect(selectionCount.textContent).toBe("2 foo 60 bar selected");
+        expect(editorPosition.textContent).toBe("2:31 2 foo 60 bar selected");
       });
 
-      it("updates when the configuration changes", function () {
+      it("updates when the selection format configuration changes", function () {
+        atom.config.set("status-bar.selectionFormat", " %L foo %C bar selected");
         jasmine.attachToDOM(workspaceElement);
         editor.setSelectedBufferRange([
           [0, 0],
           [1, 30],
         ]);
         atom.views.performDocumentUpdate();
-        expect(selectionCount.textContent).toBe("2 foo 60 bar selected");
+        expect(editorPosition.textContent).toBe("2:31 2 foo 60 bar selected");
 
-        atom.config.set("status-bar.selectionCountFormat", "Selection: baz %C quux %L");
+        atom.config.set("status-bar.selectionFormat", " Selection: baz %C quux %L");
         atom.views.performDocumentUpdate();
-        expect(selectionCount.textContent).toBe("Selection: baz 60 quux 2");
+        expect(editorPosition.textContent).toBe("2:31 Selection: baz 60 quux 2");
+      });
+
+      it("respects the multiple cursors format string", function () {
+        atom.config.set("status-bar.multipleFormat", " and %n more");
+        jasmine.attachToDOM(workspaceElement);
+        editor.setCursorBufferPosition([0, 0]);
+        editor.addCursorAtBufferPosition([1, 2]);
+        atom.views.performDocumentUpdate();
+        expect(editorPosition.textContent).toBe("2:3 and 2 more");
       });
 
       it("does not include the next line if the last selected character is a LF", function () {
@@ -448,7 +464,7 @@ describe("Built-in Status Bar Tiles", function () {
           [1, 0],
         ]);
         atom.views.performDocumentUpdate();
-        expect(selectionCount.textContent).toBe("1 foo 30 bar selected");
+        expect(editorPosition.textContent).toBe("2:1:1:30");
       });
 
       it("does not include the next line if the last selected character is CRLF", function () {
@@ -461,8 +477,16 @@ describe("Built-in Status Bar Tiles", function () {
           [1, 0],
         ]);
         atom.views.performDocumentUpdate();
-        expect(selectionCount.textContent).toBe("1 foo 31 bar selected");
+        expect(editorPosition.textContent).toBe("2:1:1:31");
       });
+
+      describe("when clicked", () =>
+        it("triggers the go-to-line toggle event", function () {
+          const eventHandler = jasmine.createSpy("eventHandler");
+          atom.commands.add("atom-text-editor", "go-to-line:toggle", eventHandler);
+          editorPosition.click();
+          expect(eventHandler).toHaveBeenCalled();
+        }));
     });
   });
 });

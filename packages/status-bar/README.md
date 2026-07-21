@@ -4,8 +4,7 @@ Display information about the current editor such as cursor position, file path,
 
 ## Features
 
-- **Cursor position**: shows the current line and column of the cursor.
-- **Selection count**: shows the line and character count of the active selection.
+- **Editor position**: shows the cursor line and column, the selection size when text is selected, and the cursor count when there is more than one.
 - **File info**: shows the path and grammar of the current editor.
 - **Tile host**: lets other packages add custom tiles to the left or right side of the bar.
 

@@ -2,8 +2,7 @@ const { CompositeDisposable, Emitter } = require("atom");
 const Grim = require("grim");
 const StatusBarView = require("./status-bar-view");
 const FileInfoView = require("./file-info-view");
-const CursorPositionView = require("./cursor-position-view");
-const SelectionCountView = require("./selection-count-view");
+const EditorPositionView = require("./editor-position-view");
 
 module.exports = {
   activate() {
@@ -36,11 +35,8 @@ module.exports = {
     this.fileInfo = new FileInfoView();
     this.statusBar.addLeftTile({ item: this.fileInfo.element, priority: 40 });
 
-    this.cursorPosition = new CursorPositionView();
-    this.statusBar.addLeftTile({ item: this.cursorPosition.element, priority: 50 });
-
-    this.selectionCount = new SelectionCountView();
-    this.statusBar.addLeftTile({ item: this.selectionCount.element, priority: 60 });
+    this.editorPosition = new EditorPositionView();
+    this.statusBar.addLeftTile({ item: this.editorPosition.element, priority: 50 });
   },
 
   deactivate() {
@@ -50,11 +46,8 @@ module.exports = {
     this.fileInfo?.destroy();
     this.fileInfo = null;
 
-    this.cursorPosition?.destroy();
-    this.cursorPosition = null;
-
-    this.selectionCount?.destroy();
-    this.selectionCount = null;
+    this.editorPosition?.destroy();
+    this.editorPosition = null;
 
     this.statusBarPanel?.destroy();
     this.statusBarPanel = null;

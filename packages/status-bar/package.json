@@ -11,8 +11,7 @@
   },
   "dependencies": {
     "@lumine-code/fs-plus": "https://github.com/lumine-code/fs-plus.git#742e3e166f56261189ff245a63967b8f1970fadd",
-    "grim": "^2.0.1",
-    "@lumine-code/underscore-plus": "https://github.com/lumine-code/underscore-plus.git#2b75d264c2ca01d27ee69d7cd05610a097011274"
+    "grim": "^2.0.1"
   },
   "providedServices": {
     "status-bar": {
@@ -24,13 +23,6 @@
     }
   },
   "configSchema": {
-    "isVisible": {
-      "order": 4,
-      "title": "Is Visible",
-      "description": "Show status bar at the bottom of the workspace",
-      "type": "boolean",
-      "default": true
-    },
     "fullWidth": {
       "order": 1,
       "title": "Full-width",
@@ -38,19 +30,33 @@
       "type": "boolean",
       "default": true
     },
-    "cursorPositionFormat": {
+    "positionFormat": {
       "order": 2,
-      "title": "Cursor Position Format",
-      "description": "Format for the cursor position status bar element, where %L is the line number and %C is the column number",
+      "title": "Position Format",
+      "description": "Format for the cursor position in the editor status bar element, where %L is the line number and %C is the column number of the last cursor",
       "type": "string",
       "default": "%L:%C"
     },
-    "selectionCountFormat": {
+    "selectionFormat": {
       "order": 3,
-      "title": "Selection Count Format",
-      "description": "Format for the selection count status bar element, where %L is the line count and %C is the character count",
+      "title": "Selection Format",
+      "description": "Format appended when the selection is not empty, where %L is the selected line count and %C is the selected character count",
       "type": "string",
-      "default": "(%L, %C)"
+      "default": ":%L:%C"
+    },
+    "multipleFormat": {
+      "order": 4,
+      "title": "Multiple Cursors Format",
+      "description": "Format appended when there is more than one cursor, where %n is the number of cursors",
+      "type": "string",
+      "default": " #%n"
+    },
+    "isVisible": {
+      "order": 5,
+      "title": "Is Visible",
+      "description": "Show status bar at the bottom of the workspace",
+      "type": "boolean",
+      "default": true
     }
   }
 }
