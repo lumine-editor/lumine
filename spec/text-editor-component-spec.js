@@ -6206,6 +6206,10 @@ describe("TextEditorComponent", () => {
 
       element.style.width = "50px";
       component.didResize(); // schedules an update while the component is visible
+      // Actually hide the element: the width change also queues an
+      // IntersectionObserver recomputation, and a still-intersecting element
+      // would race a didShow() against the assertion below.
+      element.style.display = "none";
       component.didHide(); // hidden before the scheduled update flushes
 
       // The bailed-out update must resolve the promise rather than leak it;
@@ -6215,6 +6219,7 @@ describe("TextEditorComponent", () => {
       expect(component.visible).toBe(false);
 
       // Showing the component again performs the deferred update normally.
+      element.style.display = "";
       component.didShow();
       expect(component.visible).toBe(true);
     });
