@@ -35,7 +35,7 @@
         "Custom",
         "Hide"
       ],
-      "default": "With Selection and Cursors"
+      "default": "Row and Column, Lines and Chars"
     },
     "custom": {
       "order": 2,

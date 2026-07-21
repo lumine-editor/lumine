@@ -5,7 +5,7 @@ const templateEngine = new Liquid({ jsTruthy: true });
 const presetTemplates = Object.freeze({
   "Row and Column": "{{ end.row }}:{{ end.col }}",
   "Row and Column, Lines and Chars":
-    "{{ end.row }}:{{ end.col }}{% if chars %} ({{ lines }}:{{ chars }}){% endif %}",
+    "{{ end.row }}:{{ end.col }}{% if chars %} ({{ lines }}:{{ chars }}){% endif %}{% if n > 1 %} #{{ n }}{% endif %}",
   "With Selection":
     "{{ start.row }}:{{ start.col }}{% if chars %}-{{ end.row }}:{{ end.col }}{% endif %}",
   "With Selection and Cursors":

@@ -281,6 +281,8 @@ describe("Editor Status", function () {
     });
 
     describe("when the associated editor's selection changes", function () {
+      beforeEach(() => atom.config.set("editor-status.template", "With Selection and Cursors"));
+
       it("shows the selection range in the status bar", function () {
         jasmine.attachToDOM(workspaceElement);
 
@@ -456,6 +458,11 @@ describe("Editor Status", function () {
         ]);
         atom.views.performDocumentUpdate();
         expect(editorPosition.textContent).toBe("2:31 (2:60)");
+
+        editor.setCursorBufferPosition([0, 0]);
+        editor.addCursorAtBufferPosition([1, 2]);
+        atom.views.performDocumentUpdate();
+        expect(editorPosition.textContent).toBe("2:3 #2");
       });
 
       it("shows the range for the 'With Selection' preset", function () {
