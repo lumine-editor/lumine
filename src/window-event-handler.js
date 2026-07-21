@@ -31,6 +31,9 @@ module.exports = class WindowEventHandler {
   initialize(window, document) {
     this.window = window;
     this.document = document;
+    // Derive the initial visual state from the document instead of inheriting
+    // a stale class when focus changed before this handler was installed.
+    this.document.body.classList.toggle("is-blurred", !this.document.hasFocus());
     this.subscriptions.add(
       this.atomEnvironment.commands.add(this.window, {
         "window:toggle-full-screen": this.handleWindowToggleFullScreen,

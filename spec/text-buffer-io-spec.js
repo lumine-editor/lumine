@@ -1187,8 +1187,14 @@ describe("TextBuffer IO", () => {
       await writeBurstAndWaitForLoad("abcde", "abcdef");
 
       const changed = new Promise((resolve) => buffer.onDidChange(resolve));
-      for (const { release } of pendingLoads) release();
-      await Promise.all([changed, ...pendingLoads.map(({ promise }) => promise)]);
+      // All three TextBuffer loads are already overlapping at this point.
+      // Complete their native reads oldest-to-newest so the latest snapshot is
+      // deterministically the final one applied to the native buffer.
+      for (const { promise, release } of pendingLoads) {
+        release();
+        await promise;
+      }
+      await changed;
 
       expect(buffer.getText()).toBe("abcdef");
       expect(changeEvents).toEqual(["will-change", "did-change"]);

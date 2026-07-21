@@ -14,6 +14,9 @@ describe("WindowEventHandler", () => {
       return loadSettings;
     });
     atom.project.destroy();
+    // Initialization must reconcile stale visual state with the document's
+    // current focus rather than waiting for another focus event.
+    document.body.classList.add("is-blurred");
     windowEventHandler = new WindowEventHandler({
       atomEnvironment: atom,
       applicationDelegate: atom.applicationDelegate,
