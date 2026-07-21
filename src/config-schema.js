@@ -419,7 +419,7 @@ const configSchema = {
       softWrapDebounceInterval: {
         title: "Soft Wrap Debounce Interval",
         description:
-          "When soft wrap is enabled, delays re-wrapping while the editor width is changing (for example during a pane resize) until the width has been stable for this many milliseconds. `0` re-wraps immediately. Higher values reduce CPU usage while resizing large files, at the cost of briefly showing stale wrapping.",
+          "When soft wrap is enabled and the editor width keeps changing (for example while dragging a pane divider), the first change re-wraps immediately and further changes are deferred until the width has been stable for this many milliseconds. `0` re-wraps on every change. Higher values reduce CPU usage while resizing large files, at the cost of briefly showing stale wrapping.",
         type: "integer",
         minimum: 0,
         maximum: 1000,

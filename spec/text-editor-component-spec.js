@@ -6084,7 +6084,7 @@ describe("TextEditorComponent", () => {
       expect(Math.abs(offsetAfter - offsetBefore)).toBeLessThan(component.getLineHeight());
     });
 
-    it("debounces the soft-wrap reflow while the width is changing when softWrapDebounceInterval is set", async () => {
+    it("debounces the soft-wrap reflow while the width keeps changing when softWrapDebounceInterval is set", async () => {
       jasmine.useRealClock();
       const { component, editor } = buildComponent({
         softWrapped: true,
@@ -6095,15 +6095,100 @@ describe("TextEditorComponent", () => {
 
       // Enable debouncing only after the initial layout has settled, so the
       // baseline width reflects the 40-character width.
+      editor.update({ softWrapDebounceInterval: 250 });
+      const widthBefore = editor.getEditorWidthInChars();
+
+      // The first change of a resize re-wraps immediately, so a one-shot
+      // layout change like a pane split or a dock toggle doesn't lag.
+      await setEditorWidthInCharacters(component, 30);
+      const widthAfterFirstChange = editor.getEditorWidthInChars();
+      expect(widthAfterFirstChange).toBeLessThan(widthBefore);
+
+      // A second change while the previous one is still within the interval
+      // is deferred: the width hasn't been stable yet.
+      await setEditorWidthInCharacters(component, 20);
+      expect(editor.getEditorWidthInChars()).toBe(widthAfterFirstChange);
+
+      // Once the width settles for the debounce interval, the reflow happens.
+      await conditionPromise(() => editor.getEditorWidthInChars() !== widthAfterFirstChange);
+      expect(editor.getEditorWidthInChars()).toBeLessThan(widthAfterFirstChange);
+    });
+
+    it("wraps a copied editor at its new pane's width immediately when softWrapDebounceInterval is set", async () => {
+      const { component, editor } = buildComponent({
+        softWrapped: true,
+        autoHeight: false,
+      });
+      await setEditorHeightInLines(component, 10);
+      await setEditorWidthInCharacters(component, 40);
+      const sourceWidth = editor.getEditorWidthInChars();
+
+      // Copy the editor into a narrower pane, as splitting a pane with
+      // copyActiveItem does.
+      const copy = editor.copy();
+      editors.push(copy);
+      const copyElement = copy.getElement();
+      const copyComponent = copy.component;
+      copy.update({ softWrapDebounceInterval: 50 });
+      copyElement.style.height = component.getLineHeight() * 10 + "px";
+      copyElement.style.width =
+        component.getGutterContainerWidth() +
+        25 * component.measurements.baseCharacterWidth +
+        verticalScrollbarWidth +
+        "px";
+      jasmine.attachToDOM(copyElement);
+
+      // The copy must wrap at the narrower width on its first paint instead
+      // of waiting out the debounce interval.
+      expect(copyComponent.softWrapDebounceTimer).toBeNull();
+      expect(copy.getEditorWidthInChars()).toBeLessThan(sourceWidth);
+    });
+
+    it("applies the initial soft-wrap synchronously even when softWrapDebounceInterval is set", () => {
+      const { component, editor, element } = buildComponent({
+        softWrapped: true,
+        autoHeight: false,
+        attach: false,
+      });
+      editor.update({ softWrapDebounceInterval: 50 });
+      jasmine.attachToDOM(element);
+
+      // Opening a file must wrap at the real width on the first paint; the
+      // debounce only coalesces width changes while the editor stays visible.
+      expect(component.softWrapDebounceTimer).toBeNull();
+      expect(editor.getEditorWidthInChars()).toBe(
+        component.getScrollContainerClientWidthInBaseCharacters(),
+      );
+    });
+
+    it("re-wraps synchronously when the editor returns from the background with a new width", async () => {
+      jasmine.useRealClock();
+      const { component, editor, element } = buildComponent({
+        softWrapped: true,
+        autoHeight: false,
+      });
+      await setEditorHeightInLines(component, 10);
+      await setEditorWidthInCharacters(component, 40);
       editor.update({ softWrapDebounceInterval: 50 });
       const widthBefore = editor.getEditorWidthInChars();
 
-      // Narrowing the editor should not re-wrap immediately while debouncing.
-      await setEditorWidthInCharacters(component, 20);
-      expect(editor.getEditorWidthInChars()).toBe(widthBefore);
+      // Hide the editor (background pane item) and narrow it while hidden.
+      element.style.display = "none";
+      component.didHide();
+      element.style.width =
+        component.getGutterContainerWidth() +
+        20 * component.measurements.baseCharacterWidth +
+        verticalScrollbarWidth +
+        "px";
 
-      // Once the width settles for the debounce interval, the reflow happens.
-      await conditionPromise(() => editor.getEditorWidthInChars() !== widthBefore);
+      // On reveal, the ResizeObserver measures the new size before the
+      // IntersectionObserver delivers didShow; the reflow must land on the
+      // reveal paint instead of waiting out the debounce interval.
+      element.style.display = "";
+      component.didResize();
+      component.didShow();
+
+      expect(component.softWrapDebounceTimer).toBeNull();
       expect(editor.getEditorWidthInChars()).toBeLessThan(widthBefore);
     });
 

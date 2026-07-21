@@ -1664,6 +1664,14 @@ module.exports = class TextEditorComponent {
       this.visible = true;
       this.props.model.setVisible(true);
       this.resizeBlockDecorationMeasurementsArea = true;
+      // A newly opened editor or one returning from a background pane must
+      // wrap at its real width on the reveal paint; the debounce only
+      // coalesces width changes that happen while the editor stays visible.
+      if (this.softWrapDebounceTimer) {
+        clearTimeout(this.softWrapDebounceTimer);
+        this.softWrapDebounceTimer = null;
+      }
+      this.flushingSoftWrapColumn = true;
       this.updateSync();
       this.flushPendingLogicalScrollPosition();
     }
@@ -2624,11 +2632,18 @@ module.exports = class TextEditorComponent {
   updateModelSoftWrapColumn() {
     const { model } = this.props;
     const newEditorWidthInChars = this.getScrollContainerClientWidthInBaseCharacters();
-    if (newEditorWidthInChars === model.getEditorWidthInChars()) return;
+    if (newEditorWidthInChars === model.getEditorWidthInChars()) {
+      this.flushingSoftWrapColumn = false;
+      return;
+    }
 
-    // Optionally coalesce rapid width changes (e.g. during a pane resize) into a
-    // single reflow once the width settles, to avoid re-wrapping every frame on
-    // large files. The trailing flush re-enters this method with the flag set.
+    // Optionally coalesce rapid width changes (e.g. while dragging a pane
+    // divider) into fewer reflows on large files. The first change of a resize
+    // applies synchronously, so a one-shot layout change (a pane split, a dock
+    // toggle, a copy's pane settling) re-wraps on the frame it happens; only
+    // changes arriving while a previous one is still within the interval are
+    // deferred until the width has been stable for the interval. The trailing
+    // flush re-enters this method with the flag set.
     const debounceInterval = model.getSoftWrapDebounceInterval();
     if (
       debounceInterval > 0 &&
@@ -2636,13 +2651,20 @@ module.exports = class TextEditorComponent {
       !this.flushingSoftWrapColumn &&
       model.isSoftWrapped()
     ) {
-      if (this.softWrapDebounceTimer) clearTimeout(this.softWrapDebounceTimer);
+      if (this.softWrapDebounceTimer) {
+        clearTimeout(this.softWrapDebounceTimer);
+        this.softWrapDebounceTimer = setTimeout(() => {
+          this.softWrapDebounceTimer = null;
+          this.flushingSoftWrapColumn = true;
+          this.scheduleUpdate();
+        }, debounceInterval);
+        return;
+      }
+      // Leading edge: open the coalescing window and fall through to apply
+      // this change synchronously.
       this.softWrapDebounceTimer = setTimeout(() => {
         this.softWrapDebounceTimer = null;
-        this.flushingSoftWrapColumn = true;
-        this.scheduleUpdate();
       }, debounceInterval);
-      return;
     }
     this.flushingSoftWrapColumn = false;
 
