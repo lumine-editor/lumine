@@ -55,7 +55,7 @@ describe("Diff grammars", () => {
 
     it("is preferred for patch files", () => {
       const grammar = atom.grammars.selectGrammar(
-        "patches/node-pty+1.0.0-beta34-pulsar.patch",
+        "patches/node-pty+1.1.0.patch",
         "diff --git a/node_modules/node-pty/deps/winpty/src/winpty.gyp b/node_modules/node-pty/deps/winpty/src/winpty.gyp\n",
       );
 
