@@ -13,7 +13,7 @@ const temp = require("temp");
 const path = require("path");
 const { ipcRenderer } = require("electron");
 const { ConsoleReporter } = require("@jasminejs/reporters");
-const ListReporter = require("../helpers/jasmine2-list-reporter");
+const ListReporter = require("../helpers/jasmine-list-reporter");
 
 temp.track();
 
@@ -28,7 +28,7 @@ const realClearTimeout = window.clearTimeout.bind(window);
 
 module.exports = function ({ logFile, headless, testPaths, buildAtomEnvironment }) {
   // Load Jasmine
-  require("../helpers/jasmine2-singleton");
+  require("../helpers/jasmine-singleton");
   defineJasmineHelpersOnWindow(jasmine.getEnv());
 
   // Build Atom Environment
@@ -539,10 +539,10 @@ const loadSpecsAndRunThem = (logFile, headless, testPaths) => {
     configureJasmineEnv({ forbidDuplicateNames: false, random: false });
 
     // Load before and after hooks, custom matchers
-    require("../helpers/jasmine2-custom-matchers").register(jasmineEnv);
-    require("../helpers/jasmine2-spies").register(jasmineEnv);
-    require("../helpers/jasmine2-time").register(jasmineEnv);
-    require("../helpers/jasmine2-warnings").register(jasmineEnv);
+    require("../helpers/jasmine-custom-matchers").register(jasmineEnv);
+    require("../helpers/jasmine-spies").register(jasmineEnv);
+    require("../helpers/jasmine-time").register(jasmineEnv);
+    require("../helpers/jasmine-warnings").register(jasmineEnv);
 
     // Load specs and set spec type
     for (let testPath of Array.from(testPaths)) {
@@ -642,7 +642,7 @@ const buildReporter = ({ logFile, headless }) => {
   if (headless) {
     return buildConsoleReporter(logFile);
   } else {
-    const AtomReporter = require("../helpers/jasmine2-atom-reporter.js");
+    const AtomReporter = require("../helpers/jasmine-atom-reporter.js");
     return new AtomReporter();
   }
 };
