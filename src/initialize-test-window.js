@@ -49,8 +49,19 @@ module.exports = async function ({ blobStore }) {
       // The window must still be shown: this Chromium serves a natively hidden
       // window's requestAnimationFrame from a ~1 Hz synthetic tick source
       // (regardless of `backgroundThrottling: false`), which starves specs that
-      // await real animation frames. Show without stealing focus.
-      remote.getCurrentWindow().showInactive();
+      // await real animation frames. Locally, show without stealing focus —
+      // focus-dependent specs already tolerate an unfocused document when the
+      // developer is working elsewhere. On CI there is no user to disturb, and
+      // since Electron 43.2 an inactive window's document no longer reports
+      // itself focused, which fails every focus-dependent spec on Linux and
+      // Windows runners; take focus there so those specs stay meaningful.
+      const currentWindow = remote.getCurrentWindow();
+      if (process.env.CI) {
+        currentWindow.show();
+        currentWindow.focus();
+      } else {
+        currentWindow.showInactive();
+      }
     } else {
       // Show window synchronously so a focusout doesn't fire on input elements
       // that are focused in the very first spec run.
