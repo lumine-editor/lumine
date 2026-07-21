@@ -243,6 +243,33 @@ describe("watchPath", function () {
         expect(first0.path.startsWith(relativizedPath)).toBe(false);
       });
 
+      it("recovers running watchers when the worker process dies", async function () {
+        jasmine.useRealClock();
+        const rootDir = await tempMkdir("atom-fsmanager-test-").then(realpath);
+        const target = path.join(rootDir, "recovery.txt");
+        await writeFile(target, "start\n", { encoding: "utf8" });
+
+        const received = [];
+        const watcher = await watchPath(rootDir, {}, (events) => received.push(...events));
+        disposables.add(watcher);
+
+        // Kill the worker out from under a running watcher. The class must
+        // respawn the worker and resubscribe the watcher on its own.
+        const WatcherClass = watcher.native.constructor;
+        const firstTask = WatcherClass.task;
+        firstTask.childProcess.kill("SIGKILL");
+        await conditionPromise(() => WatcherClass.task !== firstTask);
+
+        // Nudge the file until the resubscribed watcher reports it; the
+        // respawned worker needs a moment to arm.
+        const deadline = Date.now() + 30000;
+        while (received.length === 0 && Date.now() < deadline) {
+          await appendFile(target, "change\n", { encoding: "utf8" });
+          await wait(1000);
+        }
+        expect(received.length).toBeGreaterThan(0);
+      }, 45000);
+
       it("reuses existing native watchers even while they're still starting", async function () {
         const rootDir = await tempMkdir("atom-fsmanager-test-");
 

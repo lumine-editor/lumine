@@ -14,6 +14,15 @@ const WATCHER_STATE = {
   STOPPING: Symbol("stopping"),
 };
 
+// Private: Error code marking an unexpected exit of the file-watcher worker.
+const WORKER_EXIT_ERROR_CODE = "ERR_WATCHER_WORKER_EXITED";
+
+function workerExitError() {
+  const error = new Error("The file-watcher worker process exited unexpectedly");
+  error.code = WORKER_EXIT_ERROR_CODE;
+  return error;
+}
+
 // Private: Interface with and normalize events from a filesystem watcher
 // implementation.
 class NativeWatcher {
@@ -178,6 +187,14 @@ class WorkerProcessWatcher extends NativeWatcher {
   // Keeps track of pending method calls indexed by ID.
   static PROMISE_META = new Map();
 
+  // Timestamp of the most recent unexpected worker exit, used to detect
+  // crash loops.
+  static lastWorkerExit = null;
+
+  // Subscriptions bound to the current task in `initialize`, disposed when
+  // the class re-initializes so handlers don't accumulate on the emitter.
+  static taskSubscriptions = null;
+
   static createWatcherTask() {
     this.started = false;
     this.initialized = false;
@@ -204,14 +221,32 @@ class WorkerProcessWatcher extends NativeWatcher {
     if (this.initialized) return;
     if (!this.task) this.createWatcherTask();
 
-    // Create new copies of these maps so that we don't accidentally share
-    // state with any other subclasses of `WorkerProcessWatcher`.
-    this.PROMISE_META = new Map();
-    this.INSTANCES = new Map();
+    // Create own copies of these maps (rather than inheriting the parent
+    // class's) so that we don't accidentally share state with any other
+    // subclasses of `WorkerProcessWatcher`. On re-initialization after a
+    // worker crash, keep the existing maps so surviving instances stay
+    // registered.
+    if (!Object.prototype.hasOwnProperty.call(this, "PROMISE_META")) {
+      this.PROMISE_META = new Map();
+    }
+    if (!Object.prototype.hasOwnProperty.call(this, "INSTANCES")) {
+      this.INSTANCES = new Map();
+    }
+
+    // The task object may outlive several terminate/re-initialize cycles.
+    // Dispose the previous cycle's handlers so they don't accumulate on its
+    // emitter — a duplicated `task:exited` handler would sabotage the
+    // respawn performed by the first copy.
+    this.taskSubscriptions?.dispose();
+    this.taskSubscriptions = new CompositeDisposable();
+    const boundTask = this.task;
+    const bind = (event, callback) => {
+      this.taskSubscriptions.add(this.task.on(event, callback));
+    };
 
     // Response to a method call. Look up the promise and its resolvers in the
     // table and call the appropriate one.
-    this.task.on("watcher:reply", ({ id, args, error }) => {
+    bind("watcher:reply", ({ id, args, error }) => {
       let meta = this.PROMISE_META.get(id);
       if (!meta) return;
       if (error) {
@@ -223,49 +258,85 @@ class WorkerProcessWatcher extends NativeWatcher {
     });
 
     // Filesystem events reported by the watcher.
-    this.task.on("watcher:events", ({ id, events }) => {
+    bind("watcher:events", ({ id, events }) => {
       let instance = this.INSTANCES.get(id);
       instance?.onEvents(events);
     });
 
     // Errors reported by the watcher.
-    this.task.on("watcher:error", ({ id, error }) => {
+    bind("watcher:error", ({ id, error }) => {
       let instance = this.INSTANCES.get(id);
       instance?.onError(new Error(error));
     });
 
     // The watcher signaling that it's ready to start listening to files.
-    this.task.on("watcher:ready", () => {
+    bind("watcher:ready", () => {
       this.PROMISE_META.get("self:start")?.resolve?.();
     });
 
     // Forward logging messages to the renderer's console.
-    this.task.on("console:log", (args) => console.log(...args));
-    this.task.on("console:warn", (args) => console.warn(...args));
-    this.task.on("console:error", (args) => console.error(...args));
+    bind("console:log", (args) => console.log(...args));
+    bind("console:warn", (args) => console.warn(...args));
+    bind("console:error", (args) => console.error(...args));
 
     // The worker crashed or its channel broke. Reject pending calls instead
-    // of leaving them hanging, and reset so that the next watch request
-    // spawns a fresh worker. Watchers that were already running go silent;
-    // their owners are notified through onError.
-    this.task.on("task:exited", () => {
-      console.error(
-        "The file-watcher worker process exited unexpectedly; it will be respawned on the next watch request",
-      );
-      const error = new Error("The file-watcher worker process exited unexpectedly");
+    // of leaving them hanging, reset so that the next watch request spawns a
+    // fresh worker, and resubscribe the watchers that were already running so
+    // they don't go silent.
+    bind("task:exited", () => {
+      // A stale handler from an earlier cycle must not touch current state.
+      if (this.task !== boundTask) return;
+      console.error("The file-watcher worker process exited unexpectedly; respawning it");
+      const error = workerExitError();
       for (const meta of this.PROMISE_META.values()) {
         meta.reject?.(error);
       }
       this.PROMISE_META.clear();
-      for (const instance of this.INSTANCES.values()) {
-        instance.onError(error);
-      }
       this.task = undefined;
       this.initialized = false;
       this.started = false;
+
+      // Guard against a crash loop: if the previous worker also died moments
+      // ago, don't respawn eagerly. The next explicit watch request will
+      // still spawn a fresh worker, which rate-limits by demand.
+      const now = Date.now();
+      const rapidExit = this.lastWorkerExit != null && now - this.lastWorkerExit < 5000;
+      this.lastWorkerExit = now;
+
+      const running = [...this.INSTANCES.values()].filter((instance) => instance.isRunning());
+      if (!rapidExit && running.length > 0) {
+        this.resubscribe(running);
+      } else {
+        for (const instance of running) {
+          instance.onError(error);
+        }
+      }
     });
 
     this.initialized = true;
+  }
+
+  // Respawn the worker and re-issue `watcher:watch` for watchers that were
+  // running when the previous worker died. Watchers whose start was in flight
+  // retry on their own (see `doStart`).
+  static async resubscribe(instances) {
+    try {
+      this.initialize();
+      await this.startTask();
+      await Promise.all(
+        instances.map((instance) =>
+          this.sendEvent("watcher:watch", {
+            normalizedPath: instance.normalizedPath,
+            instance: instance.id,
+            ignored: instance.ignoredNames,
+          }),
+        ),
+      );
+    } catch (error) {
+      for (const instance of instances) {
+        instance.onError(error);
+      }
+    }
   }
 
   // Tell the worker to set up file-watching.
@@ -297,6 +368,10 @@ class WorkerProcessWatcher extends NativeWatcher {
 
   // Send an event to the worker and wait for its response.
   static async sendEvent(event, args) {
+    // The worker may have just died (its subscriptions died with it), so
+    // there is nothing to talk to and nothing to clean up.
+    if (!this.task) return;
+
     let id = this.generateID();
     let bundle = { id, event, args };
     let meta = {};
@@ -359,16 +434,27 @@ class WorkerProcessWatcher extends NativeWatcher {
     // watcher and unregister just after ending a watcher, we get to use it as
     // a sort of reference-counting. That helps us know when the task itself
     // can be killed.
-    this.constructor.register(this);
-    if (!this.constructor.started) {
-      await this.constructor.startTask();
-    }
+    const watch = async () => {
+      this.constructor.register(this);
+      if (!this.constructor.started) {
+        await this.constructor.startTask();
+      }
 
-    return await this.send("watcher:watch", {
-      normalizedPath: this.normalizedPath,
-      instance: this.id,
-      ignored: this.ignoredNames,
-    });
+      return await this.send("watcher:watch", {
+        normalizedPath: this.normalizedPath,
+        instance: this.id,
+        ignored: this.ignoredNames,
+      });
+    };
+
+    try {
+      return await watch();
+    } catch (error) {
+      if (error.code !== WORKER_EXIT_ERROR_CODE) throw error;
+      // The worker died while this watch was in flight; a fresh worker is
+      // spawned on demand, so a single retry recovers.
+      return await watch();
+    }
   }
 
   async doStop() {
