@@ -211,9 +211,13 @@ describe("Snippet Loading", () => {
       it("reloads the snippets", async () => {
         jasmine.useRealClock();
         fs.mkdirSync(configDirPath, { recursive: true });
-        fs.writeFileSync(
-          path.join(configDirPath, "snippets.json"),
-          `\
+        // The user snippets watcher arms asynchronously after activation, so
+        // rewrite until the change is observed: a single write could land
+        // before the watcher is armed and would never be reported.
+        await conditionPromise(() => {
+          fs.writeFileSync(
+            path.join(configDirPath, "snippets.json"),
+            `\
 {
 ".foo": {
   "foo snippet": {
@@ -223,9 +227,7 @@ describe("Snippet Loading", () => {
 }
 }\
 `,
-        );
-
-        await conditionPromise(() => {
+          );
           const snippet = snippetsService.snippetsForScopes([".foo"])["foo"];
           return snippet && snippet.body === "bar2";
         }, "snippets to be changed");
@@ -274,17 +276,18 @@ describe("Snippet Loading", () => {
     describe("when that file changes", () => {
       it("reloads the snippets", async () => {
         fs.mkdirSync(configDirPath, { recursive: true });
-        fs.writeFileSync(
-          path.join(configDirPath, "snippets.cson"),
-          `\
+        // See the snippets.json twin above: rewrite until observed, because
+        // the watcher arms asynchronously after activation.
+        await conditionPromise(() => {
+          fs.writeFileSync(
+            path.join(configDirPath, "snippets.cson"),
+            `\
 ".foo":
   "foo snippet":
     "prefix": "foo"
     "body": "bar2"\
 `,
-        );
-
-        await conditionPromise(() => {
+          );
           const snippet = snippetsService.snippetsForScopes([".foo"])["foo"];
           return snippet && snippet.body === "bar2";
         }, "snippets to be changed");
