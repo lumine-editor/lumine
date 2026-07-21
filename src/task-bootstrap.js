@@ -46,13 +46,21 @@ const setupGlobals = function () {
     },
   };
 
-  global.emit = (event, ...args) => process.send({ event, args });
+  // A send on a closed channel emits an uncaught `error` event; the parent
+  // window may go away at any time, so drop messages once disconnected.
+  global.emit = (event, ...args) => {
+    if (process.connected) process.send({ event, args });
+  };
   global.navigator = { userAgent };
   return (global.window = global);
 };
 
 const handleEvents = function () {
   process.on("uncaughtException", (error) => console.error(error.message, error.stack));
+
+  // The uncaughtException handler above keeps this process alive; without
+  // this, a task whose window closed would linger forever as a zombie.
+  process.on("disconnect", () => process.exit(0));
 
   return process.on("message", function ({ event, args } = {}) {
     if (event !== "start") {

@@ -107,6 +107,10 @@ module.exports = class Task {
         this.emitter.emit(event, args);
       }
     });
+    // A dying IPC channel emits `error` on the child object; without a
+    // listener that becomes an uncaught "Channel closed" exception in the
+    // renderer. Clean up as if the task had been terminated.
+    this.childProcess.on("error", () => this.terminate());
     // Catch the errors that happened before task-bootstrap.
     if (this.childProcess.stdout != null) {
       this.childProcess.stdout.removeAllListeners();
@@ -149,6 +153,12 @@ module.exports = class Task {
   //
   // * `message` The message to send to the task.
   send(message) {
+    if (this.childProcess != null && this.childProcess.connected === false) {
+      // The child exited or its channel closed without a deliberate
+      // terminate(); sending would emit an uncaught `error` event instead of
+      // throwing. Clean up and fail the documented way.
+      this.terminate();
+    }
     if (this.childProcess != null) {
       this.childProcess.send(message);
     } else {

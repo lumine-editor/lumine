@@ -252,12 +252,22 @@ class GitHost {
         signal.addEventListener("abort", entry.onAbort, { once: true });
       }
       this.pending.set(id, entry);
-      this.child.send({ event: "git:request", id, op, payload });
+      // Only an explicit `connected: false` means the channel closed; test
+      // doubles without the property must keep the plain send path.
+      if (this.child.connected === false) {
+        // The channel closed before the exit handler ran; fail this request
+        // (and any others) as retriable instead of throwing out of send.
+        this.handleExit();
+      } else {
+        this.child.send({ event: "git:request", id, op, payload });
+      }
     });
   }
 
   sendCancel(id) {
-    this.child?.send({ event: "git:cancel", id });
+    if (this.child && this.child.connected !== false) {
+      this.child.send({ event: "git:cancel", id });
+    }
   }
 
   terminate() {

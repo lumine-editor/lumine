@@ -88,6 +88,18 @@ describe("Task", function () {
     expect(() => task.terminate()).not.toThrow();
   });
 
+  describe("when the child process dies without terminate()", function () {
+    it("cleans up and throws the documented error on send instead of emitting an uncaught error", async function () {
+      const task = new Task(require.resolve("./fixtures/task-spec-handler"));
+      const exited = new Promise((resolve) => task.childProcess.on("exit", resolve));
+      task.childProcess.kill("SIGKILL");
+      await exited;
+
+      expect(() => task.send("hi")).toThrowError("Cannot send message to terminated process");
+      expect(task.childProcess).toBe(null);
+    });
+  });
+
   describe("::cancel()", function () {
     it("dispatches 'task:cancelled' when invoked on an active task", function () {
       const task = new Task(require.resolve("./fixtures/task-spec-handler"));

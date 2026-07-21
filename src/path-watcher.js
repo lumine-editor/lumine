@@ -192,7 +192,7 @@ class WorkerProcessWatcher extends NativeWatcher {
   static unregister(instance) {
     this.INSTANCES.delete(instance.id);
     if (this.INSTANCES.size === 0) {
-      this.task.terminate();
+      this.task?.terminate();
       this.initialized = false;
       this.started = false;
 
@@ -243,6 +243,27 @@ class WorkerProcessWatcher extends NativeWatcher {
     this.task.on("console:log", (args) => console.log(...args));
     this.task.on("console:warn", (args) => console.warn(...args));
     this.task.on("console:error", (args) => console.error(...args));
+
+    // The worker crashed or its channel broke. Reject pending calls instead
+    // of leaving them hanging, and reset so that the next watch request
+    // spawns a fresh worker. Watchers that were already running go silent;
+    // their owners are notified through onError.
+    this.task.on("task:exited", () => {
+      console.error(
+        "The file-watcher worker process exited unexpectedly; it will be respawned on the next watch request",
+      );
+      const error = new Error("The file-watcher worker process exited unexpectedly");
+      for (const meta of this.PROMISE_META.values()) {
+        meta.reject?.(error);
+      }
+      this.PROMISE_META.clear();
+      for (const instance of this.INSTANCES.values()) {
+        instance.onError(error);
+      }
+      this.task = undefined;
+      this.initialized = false;
+      this.started = false;
+    });
 
     this.initialized = true;
   }

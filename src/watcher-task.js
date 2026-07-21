@@ -44,6 +44,13 @@ class WatcherTask {
       this.emitter.emit(event, args);
     });
 
+    // A dying channel emits `error` on the child object; without a listener
+    // that becomes an uncaught "Channel closed" exception in the renderer.
+    // Treat both a channel error and an unexpected exit as the worker being
+    // gone: drop the child so sends become no-ops and let owners react.
+    this.childProcess.on("error", () => this.handleExit());
+    this.childProcess.on("exit", () => this.handleExit());
+
     const { stdout, stderr } = this.childProcess;
 
     // Catch the errors that happened before bootstrap.
@@ -74,7 +81,24 @@ class WatcherTask {
   }
 
   send(message) {
-    this.childProcess?.send(message);
+    // `connected` can go false before `exit` is delivered; sending on a
+    // closed channel would emit an `error` event rather than throw. Only an
+    // explicit `connected: false` means closed, so test doubles without the
+    // property keep the plain send path.
+    if (this.childProcess && this.childProcess.connected !== false) {
+      this.childProcess.send(message);
+    }
+  }
+
+  // Called when the worker exits on its own or its channel breaks — not on
+  // deliberate `terminate()`, which removes all listeners first.
+  handleExit() {
+    if (!this.childProcess) return;
+    this.childProcess.removeAllListeners();
+    this.childProcess.stdout?.removeAllListeners();
+    this.childProcess.stderr?.removeAllListeners();
+    this.childProcess = null;
+    this.emitter.emit("task:exited");
   }
 
   on(eventName, callback) {

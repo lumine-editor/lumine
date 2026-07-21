@@ -90,6 +90,8 @@ module.exports = [
       "src/askpass.js",
       "src/start.js",
       "src/git-host-worker.js",
+      "src/task-bootstrap.js",
+      "src/watcher-task-bootstrap.js",
     ],
     rules: { "n/no-process-exit": "off" },
   },

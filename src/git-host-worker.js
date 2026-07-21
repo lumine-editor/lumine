@@ -30,11 +30,14 @@ function serializeError(error) {
 }
 
 function reply(id, result) {
-  process.send({ event: "git:reply", id, result });
+  // The renderer may have gone away while the request ran; sending on a
+  // closed channel throws (or emits an uncaught `error`) instead of failing
+  // quietly.
+  if (process.connected) process.send({ event: "git:reply", id, result });
 }
 
 function replyError(id, error) {
-  process.send({ event: "git:reply", id, error: serializeError(error) });
+  if (process.connected) process.send({ event: "git:reply", id, error: serializeError(error) });
 }
 
 async function handleRequest({ id, op, payload }) {
