@@ -3705,9 +3705,8 @@ describe("TextEditorComponent", () => {
 
         element.style.width = "50px";
         // Drive the resize directly instead of waiting on ResizeObserver
-        // delivery, so the update is scheduled deterministically.
+        // delivery; didResize performs the update synchronously.
         component.didResize();
-        await component.getNextUpdatePromise();
         assertLinesAreAlignedWithLineNumbers(component);
       }
     });
@@ -3723,9 +3722,8 @@ describe("TextEditorComponent", () => {
 
       element.style.width = "800px";
       // Drive the resize directly instead of waiting on ResizeObserver
-      // delivery, so the update is scheduled deterministically.
+      // delivery; didResize performs the update synchronously.
       component.didResize();
-      await component.getNextUpdatePromise();
       expect(component.refs.blockDecorationMeasurementArea.offsetWidth).toBe(
         component.getScrollWidth(),
       );
@@ -6211,6 +6209,32 @@ describe("TextEditorComponent", () => {
       expect(editor.getEditorWidthInChars()).toBeLessThan(widthBefore);
     });
 
+    it("re-wraps synchronously when a moved editor re-attaches in a differently sized pane", async () => {
+      const { component, editor, element } = buildComponent({
+        softWrapped: true,
+        autoHeight: false,
+      });
+      await setEditorHeightInLines(component, 10);
+      await setEditorWidthInCharacters(component, 40);
+      editor.update({ softWrapDebounceInterval: 50 });
+      const widthBefore = editor.getEditorWidthInChars();
+
+      // Dragging a tab into a split detaches the element and re-attaches it
+      // in a pane with a different width.
+      element.remove();
+      element.style.width =
+        component.getGutterContainerWidth() +
+        20 * component.measurements.baseCharacterWidth +
+        verticalScrollbarWidth +
+        "px";
+      jasmine.attachToDOM(element);
+
+      // The re-attached editor must wrap at the new pane's width on its first
+      // paint, before the ResizeObserver has even fired.
+      expect(component.softWrapDebounceTimer).toBeNull();
+      expect(editor.getEditorWidthInChars()).toBeLessThan(widthBefore);
+    });
+
     it("preserves the visual scroll position when copied into a pane with a different width", async () => {
       const { component, editor } = buildComponent({
         softWrapped: true,
@@ -6309,7 +6333,7 @@ describe("TextEditorComponent", () => {
       const { component, element } = buildComponent({ autoHeight: false });
 
       element.style.width = "50px";
-      component.didResize(); // schedules an update while the component is visible
+      component.scheduleUpdate(); // schedules an update while the component is visible
       // Actually hide the element: the width change also queues an
       // IntersectionObserver recomputation, and a still-intersecting element
       // would race a didShow() against the assertion below.

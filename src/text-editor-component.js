@@ -1914,7 +1914,16 @@ module.exports = class TextEditorComponent {
 
   didShow() {
     if (!this.visible && this.isVisible()) {
-      if (!this.hasInitialMeasurements) this.measureDimensions();
+      if (!this.hasInitialMeasurements) {
+        this.measureDimensions();
+      } else {
+        // The pane may have changed size while the editor was hidden or
+        // detached (e.g. a tab dragged into a split lands in a narrower
+        // pane); refresh the container measurements so the reveal frame
+        // renders at the real size instead of flashing the stale one.
+        this.measureClientContainerWidth();
+        this.measureClientContainerHeight();
+      }
       this.visible = true;
       this.props.model.setVisible(true);
       this.resizeBlockDecorationMeasurementsArea = true;
@@ -2079,16 +2088,11 @@ module.exports = class TextEditorComponent {
         }
 
         this.resizeObserver.disconnect();
-        if (this.pendingScrollAnchor) {
-          // A copy is waiting for its first real layout to restore the source's
-          // viewport. ResizeObserver fires after layout but before paint, so an
-          // immediate update applies the anchor without flashing the
-          // provisional position for a frame (a scheduled update would run at
-          // the next frame's rAF, after this frame painted).
-          this.updateSync();
-        } else {
-          this.scheduleUpdate();
-        }
+        // ResizeObserver fires after layout but before paint, so an immediate
+        // update renders the new size (and applies a copy's inherited scroll
+        // anchor) without flashing a stale frame — a scheduled update would
+        // run at the next frame's rAF, after this frame painted.
+        this.updateSync();
         process.nextTick(() => {
           this.resizeObserver.observe(this.element);
         });
