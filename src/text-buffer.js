@@ -1014,7 +1014,22 @@ class TextBuffer {
     }
 
     this.emitWillChangeEvent();
-    this.buffer.setTextInRange(oldRange, newText);
+    let replacesEntireBuffer = false;
+    if (oldRange.start.row === 0 && oldRange.start.column === 0) {
+      const extent = this.buffer.getExtent();
+      replacesEntireBuffer =
+        oldRange.end.row === extent.row && oldRange.end.column === extent.column;
+    }
+    if (replacesEntireBuffer) {
+      // Route whole-buffer replacements (setText, select-all edits, formatter
+      // passes) through the native setText entry, which materializes the
+      // resulting text. The generic setTextInRange path records the
+      // replacement as one whole-buffer patch node, and every subsequent
+      // keystroke re-concatenates that node's text — O(buffer) per edit.
+      this.buffer.setText(newText);
+    } else {
+      this.buffer.setTextInRange(oldRange, newText);
+    }
 
     if (this.retainsUnmodifiedTraitAfterDeletion) {
       // This buffer is in the "deleted" state but _not_ the "modified" state.

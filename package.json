@@ -36,7 +36,7 @@
     "@lumine-code/keyboard-layout": "https://github.com/lumine-code/keyboard-layout.git#73b62b1301fd7a18a0c0567ff8c1a6ebe1fa5d94",
     "@lumine-code/scoped-property-store": "https://github.com/lumine-code/scoped-property-store.git#e8921f85773c625dd95d6711969bfa8d1d42369f",
     "@lumine-code/second-mate": "https://github.com/lumine-code/second-mate.git#1910470e5d67014151d7f94d213ff5932cfb3996",
-    "@lumine-code/superstring": "https://github.com/lumine-code/superstring.git#82b92783edf4a75dd28584dece76dbd064524f60",
+    "@lumine-code/superstring": "https://github.com/lumine-code/superstring.git#9d038d393d26c4f40c20e25ee4ddc2de8474765e",
     "@vscode/ripgrep": "1.18.0",
     "about": "file:packages/about",
     "archive-view": "file:packages/archive-view",
