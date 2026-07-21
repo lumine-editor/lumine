@@ -1,5 +1,5 @@
 const { Disposable } = require("atom");
-const etch = require("etch");
+const etch = require("@lumine-code/etch");
 const path = require("path");
 const { pathToFileURL } = require("url");
 const EtchComponent = require("./etch-component");

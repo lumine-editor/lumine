@@ -2,7 +2,7 @@
 /** @jsx etch.dom */
 
 import { CompositeDisposable, TextEditor } from "atom";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 
 import CollapsibleSectionPanel from "./collapsible-section-panel";
 import PackageCard from "./package-card";

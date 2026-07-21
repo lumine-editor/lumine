@@ -2,7 +2,7 @@
 /** @jsx etch.dom */
 
 import { Disposable } from "atom";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 
 export default class PackagePanelView {
   constructor({ title }) {

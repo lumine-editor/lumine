@@ -3,7 +3,7 @@
 
 import path from "path";
 import _ from "@lumine-code/underscore-plus";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 import { CompositeDisposable, Disposable } from "atom";
 
 // View to display the snippets that a package has registered.

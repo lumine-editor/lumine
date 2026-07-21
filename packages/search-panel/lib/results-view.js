@@ -9,7 +9,7 @@ const {
 } = require("./result-row");
 
 const ListView = require("./list-view");
-const etch = require("etch");
+const etch = require("@lumine-code/etch");
 const { binarySearch } = require("./helpers");
 const path = require("path");
 const $ = etch.dom;

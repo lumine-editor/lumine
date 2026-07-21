@@ -5,7 +5,7 @@ const { showIf } = require("./util");
 const { isEqual } = require("./helpers");
 const path = require("path");
 const assert = require("assert");
-const etch = require("etch");
+const etch = require("@lumine-code/etch");
 const $ = etch.dom;
 
 class ResultPathRowView {

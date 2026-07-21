@@ -2,7 +2,7 @@
 /** @jsx etch.dom */
 
 import { WinShell, CompositeDisposable } from "atom";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 
 export default class SystemPanel {
   constructor() {

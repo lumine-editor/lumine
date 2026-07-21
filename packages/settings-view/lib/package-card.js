@@ -2,7 +2,7 @@
 /** @jsx etch.dom */
 
 import { CompositeDisposable, Disposable } from "atom";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 import BadgeView from "./badge-view";
 import fs from "fs";
 import path from "path";

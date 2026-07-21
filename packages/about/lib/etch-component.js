@@ -1,4 +1,4 @@
-const etch = require("etch");
+const etch = require("@lumine-code/etch");
 
 /*
   Public: Abstract class for handling the initialization

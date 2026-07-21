@@ -2,7 +2,7 @@
 /** @jsx etch.dom */
 
 import path from "path";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 import gitHubUrlInfo from "./github-url-info";
 import semver from "semver";
 

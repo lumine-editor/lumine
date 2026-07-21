@@ -10,7 +10,7 @@
   },
   "main": "./lib/main",
   "dependencies": {
-    "@lumine-code/select-list": "https://github.com/lumine-code/select-list.git#5bc70d4cda0f3add369a56eb4cd8c0b851180906"
+    "@lumine-code/select-list": "https://github.com/lumine-code/select-list.git#c10cd28820c1b71e6d06f52ab3594add736eb36b"
   },
   "providedServices": {
     "recent-list": {

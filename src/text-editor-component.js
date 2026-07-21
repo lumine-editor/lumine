@@ -1,4 +1,4 @@
-const etch = require("etch");
+const etch = require("@lumine-code/etch");
 const { Point, Range } = require("./text-buffer");
 const LineTopIndex = require("line-top-index");
 const TextEditor = require("./text-editor");

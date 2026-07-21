@@ -2,7 +2,7 @@
 /** @jsx etch.dom */
 
 import { CompositeDisposable } from "atom";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 
 function isSupported() {
   return ["win32", "darwin"].includes(process.platform);

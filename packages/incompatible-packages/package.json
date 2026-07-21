@@ -10,7 +10,7 @@
     "atom": "*"
   },
   "dependencies": {
-    "etch": "^0.14.1"
+    "@lumine-code/etch": "https://github.com/lumine-code/etch.git#f790460144d0e4ea12d1d5f3394a9543c0bb7f6c"
   },
   "consumedServices": {
     "status-bar": {

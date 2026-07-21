@@ -1,4 +1,4 @@
-const etch = require("etch");
+const etch = require("@lumine-code/etch");
 const _ = require("@lumine-code/underscore-plus");
 const { CompositeDisposable, Emitter } = require("event-kit");
 const PaneContainer = require("./pane-container");

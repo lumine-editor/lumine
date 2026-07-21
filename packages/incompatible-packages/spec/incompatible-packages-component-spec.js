@@ -1,6 +1,6 @@
 /** @babel */
 
-import etch from "etch";
+import etch from "@lumine-code/etch";
 import IncompatiblePackagesComponent from "../lib/incompatible-packages-component";
 
 describe("IncompatiblePackagesComponent", () => {

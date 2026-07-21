@@ -1,7 +1,7 @@
 const path = require("path");
 const { TextEditor, Disposable, CompositeDisposable } = require("atom");
 const { pluralize } = require("./helpers");
-const etch = require("etch");
+const etch = require("@lumine-code/etch");
 const Util = require("./util");
 const ResultsPaneView = require("./results-pane");
 const $ = etch.dom;

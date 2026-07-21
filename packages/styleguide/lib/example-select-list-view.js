@@ -2,7 +2,7 @@
 /** @jsx etch.dom */
 
 import { SelectListView } from "@lumine-code/select-list";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 import dedent from "dedent";
 import CodeBlock from "./code-block";
 

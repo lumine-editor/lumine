@@ -4,7 +4,7 @@
 import path from "path";
 import _ from "@lumine-code/underscore-plus";
 import { Disposable, CompositeDisposable } from "atom";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 
 // Displays the keybindings for a package namespace
 export default class PackageKeymapView {

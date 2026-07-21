@@ -1,7 +1,7 @@
 /** @babel */
 /** @jsx etch.dom */
 
-import etch from "etch";
+import etch from "@lumine-code/etch";
 import _ from "@lumine-code/underscore-plus";
 import { CompositeDisposable, TextEditor } from "atom";
 

@@ -2,7 +2,7 @@
 /** @jsx etch.dom */
 
 import { CompositeDisposable } from "atom";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 import dedent from "dedent";
 import CodeBlock from "./code-block";
 import StyleguideSection from "./styleguide-section";

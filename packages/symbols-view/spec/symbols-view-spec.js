@@ -1,5 +1,5 @@
 const path = require("path");
-const etch = require("etch");
+const etch = require("@lumine-code/etch");
 const fs = require("@lumine-code/fs-plus");
 const temp = require("temp");
 const SymbolsView = require("../lib/symbols-view");

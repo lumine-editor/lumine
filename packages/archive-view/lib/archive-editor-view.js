@@ -5,7 +5,7 @@ import fs from "fs";
 import path from "path";
 import humanize from "humanize-plus";
 import { CompositeDisposable, Disposable, Emitter, watchFile } from "atom";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 
 import archive from "./archive";
 import FileView from "./file-view";

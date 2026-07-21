@@ -1,7 +1,7 @@
 const Grim = require("grim");
 const path = require("path");
 const _ = require("@lumine-code/underscore-plus");
-const etch = require("etch");
+const etch = require("@lumine-code/etch");
 
 describe("DeprecationCopView", () => {
   let [deprecationCopView, workspaceElement] = [];

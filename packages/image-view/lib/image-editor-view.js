@@ -1,6 +1,6 @@
 const fs = require("fs");
 const { Emitter, CompositeDisposable, Disposable } = require("atom");
-const etch = require("etch");
+const etch = require("@lumine-code/etch");
 const $ = etch.dom;
 
 // View that renders the image of an {ImageEditor}.

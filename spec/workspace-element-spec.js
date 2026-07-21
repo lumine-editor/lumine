@@ -1,5 +1,5 @@
 const { ipcRenderer } = require("electron");
-const etch = require("etch");
+const etch = require("@lumine-code/etch");
 const path = require("path");
 const temp = require("temp").track();
 

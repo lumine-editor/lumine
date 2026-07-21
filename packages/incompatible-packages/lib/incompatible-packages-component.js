@@ -1,7 +1,7 @@
 /** @babel */
 /** @jsx etch.dom */
 
-import etch from "etch";
+import etch from "@lumine-code/etch";
 
 import VIEW_URI from "./view-uri";
 const REBUILDING = "rebuilding";

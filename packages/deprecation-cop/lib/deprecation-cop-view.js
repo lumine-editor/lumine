@@ -3,7 +3,7 @@
 
 import _ from "@lumine-code/underscore-plus";
 import { CompositeDisposable } from "atom";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 import fs from "@lumine-code/fs-plus";
 import Grim from "grim";
 import path from "path";

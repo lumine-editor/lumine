@@ -2,7 +2,7 @@ const { CompositeDisposable } = require("atom");
 const ResultsView = require("./results-view");
 const ResultsModel = require("./results-model");
 const { showIf, getSearchResultsMessage, escapeHtml } = require("./util");
-const etch = require("etch");
+const etch = require("@lumine-code/etch");
 const $ = etch.dom;
 
 module.exports = class ResultsPaneView {

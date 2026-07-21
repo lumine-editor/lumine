@@ -2,7 +2,7 @@
 /** @jsx etch.dom */
 
 import path from "path";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 import _ from "@lumine-code/underscore-plus";
 import { CompositeDisposable, Disposable } from "atom";
 

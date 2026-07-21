@@ -1,4 +1,4 @@
-const etch = require("etch");
+const etch = require("@lumine-code/etch");
 const $ = etch.dom;
 
 module.exports = class ListView {

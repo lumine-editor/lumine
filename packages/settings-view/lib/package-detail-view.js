@@ -6,7 +6,7 @@ import path from "path";
 import _ from "@lumine-code/underscore-plus";
 import fs from "@lumine-code/fs-plus";
 import { CompositeDisposable, Disposable } from "atom";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 
 import PackageCard from "./package-card";
 import PackageGrammarsView from "./package-grammars-view";

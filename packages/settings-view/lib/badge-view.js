@@ -2,7 +2,7 @@
 /** @jsx etch.dom */
 
 import { CompositeDisposable, Disposable } from "atom";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 
 // Renders a package badge (e.g. Pulsar's "Outdated" / "Made for Pulsar") as a
 // small colored dot. The badge title and text are shown in a hover tooltip, and

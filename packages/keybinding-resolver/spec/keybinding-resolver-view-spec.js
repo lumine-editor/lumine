@@ -1,5 +1,5 @@
 const { it, fit, ffit, beforeEach } = require("./async-spec-helpers"); // eslint-disable-line no-unused-vars
-const etch = require("etch");
+const etch = require("@lumine-code/etch");
 
 describe("KeyBindingResolverView", () => {
   let workspaceElement, bottomDockElement;

@@ -2,7 +2,7 @@
 /** @jsx etch.dom */
 
 import { CompositeDisposable, Disposable } from "atom";
-import etch from "etch";
+import etch from "@lumine-code/etch";
 import SettingsPanel from "./settings-panel";
 
 const DEFAULTS_VALUE = "";
