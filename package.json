@@ -169,9 +169,9 @@
     "web-tree-sitter": "0.26.11",
     "whitespace": "file:./packages/whitespace",
     "window-title": "file:packages/window-title",
+    "gray-matter": "^4.0.3",
     "winattr": "^3.0.0",
     "wrap-guide": "file:./packages/wrap-guide",
-    "yaml-front-matter": "^4.1.1",
     "yargs": "18.0.0"
   },
   "packageDependencies": {

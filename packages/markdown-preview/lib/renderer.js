@@ -8,7 +8,7 @@ let githubSlugger = null;
 let innertext = null;
 let renderer = null;
 let cheerio = null;
-let yamlFrontMatter = null;
+let grayMatter = null;
 
 const { scopeForFenceName } = require("./extension-helper");
 const { resourcePath } = atom.getLoadSettings();
@@ -169,11 +169,11 @@ exports.toHTML = async function (text, filePath, grammar) {
 
 // Render with the package's own `marked` library.
 function render(text, filePath) {
-  if (marked == null || yamlFrontMatter == null || cheerio == null) {
+  if (marked == null || grayMatter == null || cheerio == null) {
     marked = require("marked");
     const GithubSlugger = require("github-slugger");
     innertext = require("innertext");
-    yamlFrontMatter = require("yaml-front-matter");
+    grayMatter = require("gray-matter");
     cheerio = require("cheerio");
 
     renderer = new marked.Renderer();
@@ -204,7 +204,7 @@ function render(text, filePath) {
     renderer,
   });
 
-  const { __content, ...vars } = yamlFrontMatter.loadFront(text);
+  const { content: __content, data: vars } = grayMatter(text);
 
   let html = marked.parse(renderYamlTable(vars) + __content);
 

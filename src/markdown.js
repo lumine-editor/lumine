@@ -8,7 +8,7 @@ const { TextEditor } = require("atom");
 const mdComponents = {
   deps: {
     domPurify: null,
-    yamlFrontMatter: null,
+    grayMatter: null,
     markdownItEmoji: null,
     markdownItGitHubHeadings: null,
     markdownItTaskCheckbox: null,
@@ -431,8 +431,9 @@ function renderMarkdown(content, givenOpts = {}) {
   let textContent;
 
   if (opts.handleFrontMatter) {
-    mdComponents.deps.yamlFrontMatter ??= require("yaml-front-matter");
-    const { __content, vars } = mdComponents.deps.yamlFrontMatter.loadFront(content);
+    mdComponents.deps.grayMatter ??= require("gray-matter");
+    const { content: __content, data } = mdComponents.deps.grayMatter(content);
+    const vars = data.vars;
 
     const renderYamlTable = (variables) => {
       if (typeof variables === "undefined") {
