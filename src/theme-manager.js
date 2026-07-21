@@ -723,14 +723,20 @@ On Linux there are currently problems with watch sizes. See [this document][watc
     };
 
     // Cross-fade between the two themes; the compositor snapshots the old
-    // rendering before `applyStyles` mutates the page.
+    // rendering before `applyStyles` mutates the page. Never in spec mode:
+    // the spec harness fakes `setTimeout`, freezing the escape timer below,
+    // and a pending transition suppresses rendering — animation-frame
+    // callbacks stop for every spec that runs after the switch.
     if (
       this.initialLoadComplete &&
       !document.hidden &&
-      typeof document.startViewTransition === "function"
+      typeof document.startViewTransition === "function" &&
+      (typeof atom === "undefined" || !atom.inSpecMode())
     ) {
       const transition = document.startViewTransition(applyStyles);
-      // A skipped transition rejects `finished`; that's expected, not an error.
+      // A skipped transition rejects `ready` and `finished`; that's expected,
+      // not an error.
+      transition.ready.catch(() => {});
       transition.finished.catch(() => {});
       // Hidden, occluded, or otherwise render-throttled windows may never get
       // the rendering opportunity the transition callback waits for; force the
