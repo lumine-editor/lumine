@@ -14,7 +14,7 @@
     "@lumine-code/underscore-plus": "https://github.com/lumine-code/underscore-plus.git#2b75d264c2ca01d27ee69d7cd05610a097011274"
   },
   "devDependencies": {
-    "@lumine-code/temp": "https://github.com/lumine-code/node-temp.git#17ce69e76271fb7a04893e99cf0bac5775fce1dd"
+    "@lumine-code/temp": "https://github.com/lumine-code/node-temp.git#929dfd04196566b21baef93fddc24a19db329bd0"
   },
   "consumedServices": {
     "atom.file-icons": {
