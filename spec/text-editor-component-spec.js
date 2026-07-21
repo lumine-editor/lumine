@@ -2785,6 +2785,10 @@ describe("TextEditorComponent", () => {
       checkScrollContainerLeft();
 
       gutterA.getElement().style.width = 100 + "px";
+      // Drive the resize directly instead of racing ResizeObserver delivery.
+      // didResizeGutterContainer measures the new gutter width and schedules
+      // the same component update that the observer callback would schedule.
+      component.didResizeGutterContainer();
       await component.getNextUpdatePromise();
       checkScrollContainerLeft();
 
@@ -3001,7 +3005,8 @@ describe("TextEditorComponent", () => {
       // render an editor that already contains some block decorations
       const { component, element } = buildComponent({ editor, rowsPerTile: 3 });
       element.style.height = 4 * component.getLineHeight() + horizontalScrollbarHeight + "px";
-      await component.getNextUpdatePromise();
+      // Drive the resize directly instead of racing ResizeObserver delivery.
+      component.didResize();
       expect(component.getRenderedStartRow()).toBe(0);
       expect(component.getRenderedEndRow()).toBe(9);
       expect(component.getScrollHeight()).toBeNear(
