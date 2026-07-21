@@ -400,12 +400,12 @@ describe("TextEditorElement", () => {
       editor.update({ autoHeight: false });
       element.getModel().setText("x\n".repeat(20));
       element.style.height = 120 + horizontalScrollbarHeight + "px";
-      // Force a synchronous re-measure instead of waiting on ResizeObserver,
-      // which macOS CI can starve long enough to leave a stale (smaller)
-      // viewport and too few visible rows for the assertions below.
-      element.component.didResize();
+      // Let the auto-height and text renders settle before re-measuring:
+      // measuring earlier can capture the inner container's stale auto-height
+      // geometry. The manual `didResize` still avoids waiting on
+      // ResizeObserver, which CI can starve into leaving a smaller viewport.
       await element.getNextUpdatePromise();
-
+      element.component.didResize();
       element.setScrollTop(80);
       await element.getNextUpdatePromise();
       // Line height (and therefore the exact visible range) depends on the

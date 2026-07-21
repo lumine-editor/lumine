@@ -45,6 +45,12 @@ module.exports = async function ({ blobStore }) {
 
       console.log = (...args) => process.stdout.write(`${util.format(...args)}\n`);
       console.error = (...args) => process.stderr.write(`${util.format(...args)}\n`);
+
+      // The window must still be shown: this Chromium serves a natively hidden
+      // window's requestAnimationFrame from a ~1 Hz synthetic tick source
+      // (regardless of `backgroundThrottling: false`), which starves specs that
+      // await real animation frames. Show without stealing focus.
+      remote.getCurrentWindow().showInactive();
     } else {
       // Show window synchronously so a focusout doesn't fire on input elements
       // that are focused in the very first spec run.

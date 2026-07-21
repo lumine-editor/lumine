@@ -41,12 +41,16 @@ module.exports = function start(resourcePath, devResourcePath, startTime) {
   args.resourcePath = normalizeDriveLetterName(resourcePath);
   args.devResourcePath = normalizeDriveLetterName(devResourcePath);
 
-  // Specs drive rendering through requestAnimationFrame promises. On Windows,
-  // Chromium's native window-occlusion tracking stops compositing for a fully
-  // covered window even with `backgroundThrottling: false`, stalling animation
+  // Specs drive rendering through requestAnimationFrame promises. Chromium
+  // treats an occluded or backgrounded window as invisible and stops
+  // compositing it even with `backgroundThrottling: false`, stalling animation
   // frames for seconds and timing out whichever spec happens to be running.
+  // (The former `CalculateNativeWinOcclusion` feature flag no longer exists in
+  // this Chromium; these switches are its maintained replacements.)
   if (args.test) {
-    app.commandLine.appendSwitch("disable-features", "CalculateNativeWinOcclusion");
+    app.commandLine.appendSwitch("disable-backgrounding-occluded-windows");
+    app.commandLine.appendSwitch("disable-renderer-backgrounding");
+    app.commandLine.appendSwitch("disable-background-timer-throttling");
   }
 
   const releaseChannel = getReleaseChannel(app.getVersion());
