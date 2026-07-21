@@ -4092,13 +4092,30 @@ class DummyScrollbarComponent {
 class GutterContainerComponent {
   constructor(props) {
     this.props = props;
-    etch.initialize(this);
+    this.refs = {};
+    this.gutterComponentsByGutter = new Map();
+    this.lastTransform = null;
+
+    this.element = document.createElement("div");
+    this.element.className = "gutter-container";
+    const style = this.element.style;
+    style.position = "relative";
+    style.zIndex = 1;
+    style.backgroundColor = "inherit";
+    this.refs.gutterContainer = this.element;
+
+    this.innerElement = document.createElement("div");
+    this.innerElement.style.willChange = "transform";
+    this.innerElement.style.display = "flex";
+    this.element.appendChild(this.innerElement);
+
+    this.updateGutters();
   }
 
   update(props) {
     if (this.shouldUpdate(props)) {
       this.props = props;
-      etch.updateSync(this);
+      this.updateGutters();
     }
   }
 
@@ -4108,56 +4125,88 @@ class GutterContainerComponent {
     );
   }
 
-  render() {
-    const {
-      hasInitialMeasurements,
-      scrollTop,
-      scrollHeight,
-      guttersToRender,
-      decorationsToRender,
-    } = this.props;
-
-    const innerStyle = {
-      willChange: "transform",
-      display: "flex",
-    };
+  // Reconciles one gutter component per rendered gutter, keyed by the gutter
+  // model object, preserving the DOM order of guttersToRender. Hidden
+  // line-number gutters unmount entirely; hidden custom gutters stay mounted
+  // with display: none.
+  updateGutters() {
+    const { hasInitialMeasurements, scrollTop, scrollHeight, guttersToRender, decorationsToRender } =
+      this.props;
 
     if (hasInitialMeasurements) {
-      innerStyle.transform = `translateY(${-roundToPhysicalPixelBoundary(scrollTop)}px)`;
+      const transform = `translateY(${-roundToPhysicalPixelBoundary(scrollTop)}px)`;
+      if (transform !== this.lastTransform) {
+        this.innerElement.style.transform = transform;
+        this.lastTransform = transform;
+      }
     }
 
-    return $.div(
-      {
-        ref: "gutterContainer",
-        key: "gutterContainer",
-        className: "gutter-container",
-        style: {
-          position: "relative",
-          zIndex: 1,
-          backgroundColor: "inherit",
-        },
-      },
-      $.div(
-        { style: innerStyle },
-        guttersToRender.map((gutter) => {
-          if (gutter.type === "line-number") {
-            return this.renderLineNumberGutter(gutter);
-          } else {
-            return $(CustomGutterComponent, {
-              key: gutter,
-              element: gutter.getElement(),
-              name: gutter.name,
-              visible: gutter.isVisible(),
-              height: scrollHeight,
-              decorations: decorationsToRender.customGutter.get(gutter.name),
-            });
-          }
-        }),
-      ),
-    );
+    const seenGutters = new Set();
+    let previousElement = null;
+    for (let i = 0; i < guttersToRender.length; i++) {
+      const gutter = guttersToRender[i];
+      let gutterComponent = this.gutterComponentsByGutter.get(gutter);
+
+      if (gutter.type === "line-number") {
+        if (!gutter.isVisible()) {
+          if (gutterComponent) this.unmountGutter(gutter, gutterComponent);
+          continue;
+        }
+
+        const gutterProps = this.buildLineNumberGutterProps(gutter);
+        if (gutterComponent) {
+          gutterComponent.update(gutterProps);
+        } else {
+          gutterComponent = new LineNumberGutterComponent(gutterProps);
+          this.gutterComponentsByGutter.set(gutter, gutterComponent);
+          if (gutter.name === "line-number") this.refs.lineNumberGutter = gutterComponent;
+        }
+      } else {
+        const gutterProps = {
+          element: gutter.getElement(),
+          name: gutter.name,
+          visible: gutter.isVisible(),
+          height: scrollHeight,
+          decorations: decorationsToRender.customGutter.get(gutter.name),
+        };
+        if (gutterComponent) {
+          gutterComponent.update(gutterProps);
+        } else {
+          gutterComponent = new CustomGutterComponent(gutterProps);
+          this.gutterComponentsByGutter.set(gutter, gutterComponent);
+        }
+      }
+
+      seenGutters.add(gutter);
+      const element = gutterComponent.element;
+      if (previousElement == null) {
+        if (this.innerElement.firstChild !== element) {
+          this.innerElement.insertBefore(element, this.innerElement.firstChild);
+        }
+      } else if (element.previousSibling !== previousElement) {
+        this.innerElement.insertBefore(element, previousElement.nextSibling);
+      }
+      previousElement = element;
+    }
+
+    this.gutterComponentsByGutter.forEach((gutterComponent, gutter) => {
+      if (!seenGutters.has(gutter)) this.unmountGutter(gutter, gutterComponent);
+    });
   }
 
-  renderLineNumberGutter(gutter) {
+  unmountGutter(gutter, gutterComponent) {
+    if (gutterComponent.destroy) {
+      gutterComponent.destroy();
+    } else {
+      gutterComponent.element.remove();
+    }
+    if (this.refs.lineNumberGutter === gutterComponent) {
+      delete this.refs.lineNumberGutter;
+    }
+    this.gutterComponentsByGutter.delete(gutter);
+  }
+
+  buildLineNumberGutterProps(gutter) {
     const {
       rootComponent,
       showLineNumbers,
@@ -4173,19 +4222,13 @@ class GutterContainerComponent {
       lineHeight,
     } = this.props;
 
-    if (!gutter.isVisible()) {
-      return null;
-    }
-
     const oneTrueLineNumberGutter = gutter.name === "line-number";
-    const ref = oneTrueLineNumberGutter ? "lineNumberGutter" : undefined;
     const width = oneTrueLineNumberGutter ? lineNumberGutterWidth : undefined;
 
     if (hasInitialMeasurements) {
       const { maxDigits, keys, bufferRows, screenRows, softWrappedFlags, foldableFlags } =
         lineNumbersToRender;
-      return $(LineNumberGutterComponent, {
-        ref,
+      return {
         element: gutter.getElement(),
         name: gutter.name,
         className: gutter.className,
@@ -4209,10 +4252,9 @@ class GutterContainerComponent {
         width,
         lineHeight: lineHeight,
         showLineNumbers,
-      });
+      };
     } else {
-      return $(LineNumberGutterComponent, {
-        ref,
+      return {
         element: gutter.getElement(),
         name: gutter.name,
         className: gutter.className,
@@ -4220,7 +4262,7 @@ class GutterContainerComponent {
         onMouseMove: gutter.onMouseMove,
         maxDigits: lineNumbersToRender.maxDigits,
         showLineNumbers,
-      });
+      };
     }
   }
 }
