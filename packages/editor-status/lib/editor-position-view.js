@@ -4,10 +4,13 @@ const { Liquid } = require("liquidjs");
 const templateEngine = new Liquid({ jsTruthy: true });
 const presetTemplates = Object.freeze({
   "Row and Column": "{{ end.row }}:{{ end.col }}",
+  "Row and Column, Lines and Chars":
+    "{{ end.row }}:{{ end.col }}{% if chars %} ({{ lines }}:{{ chars }}){% endif %}",
   "With Selection":
     "{{ start.row }}:{{ start.col }}{% if chars %}-{{ end.row }}:{{ end.col }}{% endif %}",
   "With Selection and Cursors":
     "{{ start.row }}:{{ start.col }}{% if chars %}-{{ end.row }}:{{ end.col }}{% endif %}{% if n > 1 %} #{{ n }}{% endif %}",
+  Hide: "",
 });
 
 const plural = (n, word) => `${n} ${word}${n === 1 ? "" : "s"}`;
@@ -71,9 +74,16 @@ module.exports = class EditorPositionView {
   }
 
   updateTemplate() {
-    const template =
-      presetTemplates[this.templateSelection] ||
-      (this.templateSelection === "Custom" ? this.customTemplate : this.templateSelection);
+    let template;
+    if (this.templateSelection === "Custom") {
+      template = this.customTemplate;
+    } else if (Object.prototype.hasOwnProperty.call(presetTemplates, this.templateSelection)) {
+      // A known preset (including `Hide`, which maps to an empty template).
+      template = presetTemplates[this.templateSelection];
+    } else {
+      // An unrecognized value is treated as a raw template.
+      template = this.templateSelection;
+    }
     this.parsedTemplate = null;
     if (template && template.trim()) {
       try {

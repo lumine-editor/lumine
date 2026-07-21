@@ -442,6 +442,22 @@ describe("Editor Status", function () {
         expect(editorPosition.textContent).toBe("2:31");
       });
 
+      it("shows the cursor and selection size for the 'Row and Column, Lines and Chars' preset", function () {
+        atom.config.set("editor-status.template", "Row and Column, Lines and Chars");
+        jasmine.attachToDOM(workspaceElement);
+
+        editor.setCursorScreenPosition([1, 2]);
+        atom.views.performDocumentUpdate();
+        expect(editorPosition.textContent).toBe("2:3");
+
+        editor.setSelectedBufferRange([
+          [0, 0],
+          [1, 30],
+        ]);
+        atom.views.performDocumentUpdate();
+        expect(editorPosition.textContent).toBe("2:31 (2:60)");
+      });
+
       it("shows the range for the 'With Selection' preset", function () {
         atom.config.set("editor-status.template", "With Selection");
         jasmine.attachToDOM(workspaceElement);
@@ -493,6 +509,14 @@ describe("Editor Status", function () {
         editor.addCursorAtBufferPosition([1, 2]);
         atom.views.performDocumentUpdate();
         expect(editorPosition.textContent).toBe("2 (2)");
+      });
+
+      it("hides the tile for the 'Hide' preset", function () {
+        atom.config.set("editor-status.template", "Hide");
+        jasmine.attachToDOM(workspaceElement);
+        editor.setCursorScreenPosition([1, 2]);
+        atom.views.performDocumentUpdate();
+        expect(editorPosition).toBeHidden();
       });
 
       it("hides the tile when the template renders empty", function () {
