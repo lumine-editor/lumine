@@ -6,7 +6,7 @@ const EventEmitter = require("events").EventEmitter;
 const assert = require("./assert");
 const sinon = require("sinon");
 const { escapeRegExp } = require("@lumine-code/underscore-plus");
-const temp = require("temp").track();
+const temp = require("@lumine-code/temp").track();
 
 describe("FileRecoveryService", function () {
   let recoveryService, recoveryDirectory, spies;

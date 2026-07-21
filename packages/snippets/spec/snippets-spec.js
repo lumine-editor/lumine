@@ -1,5 +1,5 @@
 const path = require("path");
-const temp = require("temp").track();
+const temp = require("@lumine-code/temp").track();
 const Snippets = require("../lib/snippets");
 const { TextEditor } = require("atom");
 const crypto = require("crypto");

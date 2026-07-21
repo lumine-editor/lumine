@@ -8,7 +8,7 @@ const {
   waitForDeferredSuggestions,
   buildIMECompositionEvent,
 } = require("./spec-helper");
-let temp = require("temp").track();
+let temp = require("@lumine-code/temp").track();
 const path = require("path");
 
 let NodeTypeText = 3;

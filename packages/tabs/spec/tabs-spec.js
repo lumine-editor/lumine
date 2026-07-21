@@ -1,6 +1,6 @@
 const _ = require("@lumine-code/underscore-plus");
 const path = require("path");
-const temp = require("temp");
+const temp = require("@lumine-code/temp");
 const TabBarView = require("../lib/tab-bar-view");
 const layout = require("../lib/layout");
 const main = require("../lib/main");

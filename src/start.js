@@ -1,6 +1,6 @@
 const { app, crashReporter } = require("electron");
 const path = require("path");
-const temp = require("temp");
+const temp = require("@lumine-code/temp");
 const parseCommandLine = require("./parse-command-line");
 const { getReleaseChannel, getConfigFilePath } = require("./get-app-details.js");
 const atomPaths = require("./atom-paths");

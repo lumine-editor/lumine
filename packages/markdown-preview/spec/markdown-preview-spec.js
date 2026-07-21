@@ -1,6 +1,6 @@
 const path = require("path");
 const fs = require("@lumine-code/fs-plus");
-const temp = require("temp").track();
+const temp = require("@lumine-code/temp").track();
 const MarkdownPreviewView = require("../lib/markdown-preview-view");
 const { TextEditor } = require("atom");
 const TextMateLanguageMode = new TextEditor().getBuffer().getLanguageMode().constructor;

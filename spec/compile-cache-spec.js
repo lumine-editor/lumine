@@ -6,7 +6,7 @@
  * Full docs: https://github.com/decaffeinate/decaffeinate/blob/main/docs/suggestions.md
  */
 const path = require("path");
-const temp = require("temp").track();
+const temp = require("@lumine-code/temp").track();
 const fs = require("@lumine-code/fs-plus");
 const babelCompiler = require("../src/babel");
 const CoffeeScript = require("coffeescript");

@@ -1,4 +1,4 @@
-const temp = require("temp");
+const temp = require("@lumine-code/temp");
 const fs = require("fs");
 const path = require("path");
 const { watch, getWatchedPaths, closeAllNodejsWatchers } = require("../src/nodejs-watcher");

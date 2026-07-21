@@ -158,7 +158,7 @@
     "symbol-provider-tree-sitter": "file:./packages/symbol-provider-tree-sitter",
     "symbols-view": "file:./packages/symbols-view",
     "tabs": "file:packages/tabs",
-    "temp": "0.9.4",
+    "@lumine-code/temp": "https://github.com/lumine-code/node-temp.git#17ce69e76271fb7a04893e99cf0bac5775fce1dd",
     "terminal": "https://github.com/lumine-code/terminal#4f25315d8cf1dccb0dc9d217cfa0040cea6f6679",
     "timecop": "file:./packages/timecop",
     "title-bar": "file:packages/title-bar",

@@ -5,7 +5,7 @@ import path from "path";
 import childProcess from "child_process";
 import { updateProcessEnv, shouldGetEnvFromShell } from "../src/update-process-env";
 import mockSpawn from "mock-spawn";
-const temp = require("temp").track();
+const temp = require("@lumine-code/temp").track();
 
 describe("updateProcessEnv(launchEnv)", function () {
   let originalProcessEnv, originalProcessPlatform, originalSpawn, spawn;

@@ -1,6 +1,6 @@
 const fs = require("@lumine-code/fs-plus");
 const path = require("path");
-const temp = require("temp").track();
+const temp = require("@lumine-code/temp").track();
 const { getConfigFilePath } = require("../src/get-app-details");
 
 describe("get-app-details", () => {

@@ -9,7 +9,7 @@
  */
 const Grim = require("grim");
 const fs = require("@lumine-code/fs-plus");
-const temp = require("temp");
+const temp = require("@lumine-code/temp");
 const path = require("path");
 const { ipcRenderer } = require("electron");
 const { ConsoleReporter } = require("@jasminejs/reporters");

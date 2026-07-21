@@ -1,6 +1,6 @@
 const path = require("path");
 const fs = require("fs");
-const temp = require("temp").track();
+const temp = require("@lumine-code/temp").track();
 const { conditionPromise, timeoutPromise: wait } = require("./async-spec-helpers");
 
 describe("Snippet Loading", () => {

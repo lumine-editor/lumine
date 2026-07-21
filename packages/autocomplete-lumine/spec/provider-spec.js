@@ -1,4 +1,4 @@
-const temp = require("temp");
+const temp = require("@lumine-code/temp");
 
 describe("Lumine API autocompletions", () => {
   let [editor, provider] = [];

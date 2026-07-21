@@ -1,6 +1,6 @@
 const path = require("path");
 const fs = require("@lumine-code/fs-plus");
-const temp = require("temp").track();
+const temp = require("@lumine-code/temp").track();
 
 describe("git-diff:toggle-diff-list", () => {
   let diffListView, editor;

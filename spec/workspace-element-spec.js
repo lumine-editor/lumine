@@ -1,7 +1,7 @@
 const { ipcRenderer } = require("electron");
 const etch = require("@lumine-code/etch");
 const path = require("path");
-const temp = require("temp").track();
+const temp = require("@lumine-code/temp").track();
 
 const { conditionPromise } = require("./helpers/async-spec-helpers");
 

@@ -1,7 +1,7 @@
 const fs = require("fs");
 const path = require("path");
 
-const temp = require("temp").track();
+const temp = require("@lumine-code/temp").track();
 
 const { EMPTY_REFS_SNAPSHOT, parseRefsSnapshot } = require("../src/repository-refs-snapshot");
 const GitRepositoryRefsProvider = require("../src/git-repository-refs-provider");

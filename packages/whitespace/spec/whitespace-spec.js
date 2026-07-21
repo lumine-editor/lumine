@@ -1,6 +1,6 @@
 const path = require("path");
 const fs = require("@lumine-code/fs-plus");
-const temp = require("temp");
+const temp = require("@lumine-code/temp");
 const { it, fit, ffit, beforeEach } = require("./async-spec-helpers"); // eslint-disable-line
 
 describe("Whitespace", () => {

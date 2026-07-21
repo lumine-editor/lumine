@@ -1,5 +1,5 @@
 const fs = require("@lumine-code/fs-plus");
-const temp = require("temp");
+const temp = require("@lumine-code/temp");
 const path = require("path");
 
 const userHome = process.env.LUMINE_HOME || path.join(fs.getHomeDirectory(), ".atom");

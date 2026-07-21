@@ -1,6 +1,6 @@
 const fs = require("fs");
 const path = require("path");
-const temp = require("temp").track();
+const temp = require("@lumine-code/temp").track();
 
 const loadPathsHandler = require("../lib/load-paths-handler");
 

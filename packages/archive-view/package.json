@@ -8,7 +8,7 @@
     "@lumine-code/etch": "https://github.com/lumine-code/etch.git#ace74599f9d6b54e9eb24ecb1e2407e9c35fcc74",
     "@lumine-code/ls-archive": "https://github.com/lumine-code/node-ls-archive.git#f897b86effcc50a6a1a41f04cdc3f4d6f288212d",
     "humanize-plus": "~1.8.2",
-    "temp": "^0.9.4"
+    "@lumine-code/temp": "https://github.com/lumine-code/node-temp.git#17ce69e76271fb7a04893e99cf0bac5775fce1dd"
   },
   "repository": "https://github.com/lumine-code/lumine",
   "license": "MIT",

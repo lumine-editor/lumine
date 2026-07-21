@@ -250,7 +250,7 @@ export default class KeyBindingResolverView {
     const bundledKeymaps = metadata ? metadata._atomKeymaps : {};
     const keymapName = path.basename(bundledKeymapPath);
     const extractedKeymapPath = path.join(
-      require("temp").mkdirSync("atom-bundled-keymap-"),
+      require("@lumine-code/temp").mkdirSync("atom-bundled-keymap-"),
       keymapName,
     );
     fs.writeFileSync(
@@ -266,7 +266,7 @@ export default class KeyBindingResolverView {
     const metadata = atom.packages.packagesCache[packageName] || {};
     const keymaps = metadata.keymaps || {};
     const extractedKeymapPath = path.join(
-      require("temp").mkdirSync("atom-bundled-keymap-"),
+      require("@lumine-code/temp").mkdirSync("atom-bundled-keymap-"),
       keymapName,
     );
     fs.writeFileSync(

@@ -5,7 +5,7 @@ import fs from "@lumine-code/fs-plus";
 import path from "path";
 const remote = require("@electron/remote");
 const app = remote.app;
-const temp = require("temp").track();
+const temp = require("@lumine-code/temp").track();
 
 describe("AtomPaths", () => {
   const portableAtomHomePath = path.join(atomPaths.getAppDirectory(), "..", ".atom");

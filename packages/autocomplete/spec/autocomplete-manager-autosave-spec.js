@@ -1,6 +1,6 @@
 "use babel";
 
-let temp = require("temp").track();
+let temp = require("@lumine-code/temp").track();
 import path from "path";
 import fs from "@lumine-code/fs-plus";
 import { conditionPromise } from "./spec-helper";

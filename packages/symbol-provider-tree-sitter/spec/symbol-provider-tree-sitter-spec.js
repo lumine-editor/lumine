@@ -1,6 +1,6 @@
 const path = require("path");
 const fs = require("@lumine-code/fs-plus");
-const temp = require("temp");
+const temp = require("@lumine-code/temp");
 const TreeSitterProvider = require("../lib/tree-sitter-provider");
 
 // Just for syntax highlighting.

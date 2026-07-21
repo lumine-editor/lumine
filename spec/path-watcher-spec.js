@@ -1,4 +1,4 @@
-const temp = require("temp");
+const temp = require("@lumine-code/temp");
 const fs = require("@lumine-code/fs-plus");
 const path = require("path");
 const { promisify } = require("util");

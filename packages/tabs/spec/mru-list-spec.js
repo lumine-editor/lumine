@@ -2,7 +2,7 @@ const { it, fit, ffit, beforeEach, afterEach } = require("./async-spec-helpers")
 
 const fs = require("@lumine-code/fs-plus");
 const path = require("path");
-const temp = require("temp").track();
+const temp = require("@lumine-code/temp").track();
 
 describe("MRU List", () => {
   let workspaceElement = null;

@@ -97,6 +97,6 @@
   },
   "devDependencies": {
     "eslint": "^10.7.0",
-    "temp": "^0.9.4"
+    "@lumine-code/temp": "https://github.com/lumine-code/node-temp.git#17ce69e76271fb7a04893e99cf0bac5775fce1dd"
   }
 }
