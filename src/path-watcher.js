@@ -283,10 +283,18 @@ class WorkerProcessWatcher extends NativeWatcher {
     // of leaving them hanging, reset so that the next watch request spawns a
     // fresh worker, and resubscribe the watchers that were already running so
     // they don't go silent.
-    bind("task:exited", () => {
+    bind("task:exited", (detail = {}) => {
       // A stale handler from an earlier cycle must not touch current state.
       if (this.task !== boundTask) return;
-      console.error("The file-watcher worker process exited unexpectedly; respawning it");
+      // The detail pinpoints a genuine worker crash (e.g. exit code
+      // 3221225477 is a Windows access violation in native code).
+      const cause =
+        detail.error != null
+          ? `channel error: ${detail.error}`
+          : `code ${detail.code}, signal ${detail.signal}`;
+      console.error(
+        `The file-watcher worker process exited unexpectedly (${cause}); respawning it`,
+      );
       const error = workerExitError();
       for (const meta of this.PROMISE_META.values()) {
         meta.reject?.(error);
