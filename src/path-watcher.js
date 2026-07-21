@@ -42,17 +42,22 @@ class NativeWatcher {
 
   // Private: Begin watching for filesystem events.
   //
-  // Has no effect if the watcher has already been started.
-  async start() {
+  // Has no effect if the watcher has already been started. Returns a promise
+  // resolving when the watcher is running; repeated calls return the promise
+  // of the in-flight (or completed) start.
+  start() {
     if (this.state !== WATCHER_STATE.STOPPED) {
-      return;
+      return this.startPromise ?? Promise.resolve();
     }
     this.state = WATCHER_STATE.STARTING;
 
-    await this.doStart();
+    this.startPromise = (async () => {
+      await this.doStart();
 
-    this.state = WATCHER_STATE.RUNNING;
-    this.emitter.emit("did-start");
+      this.state = WATCHER_STATE.RUNNING;
+      this.emitter.emit("did-start");
+    })();
+    return this.startPromise;
   }
 
   doStart() {
@@ -1066,6 +1071,27 @@ function stopAllWatchers() {
 // Private: Show the currently active native watchers in a formatted {String}.
 watchPath.printWatchers = function printWatchers() {
   return PathWatcherManager.active().print();
+};
+
+// Private: Wait for watchers that are mid-transition to settle. Owners tear
+// watchers down asynchronously (`watcherPromise.then(w => w.dispose())`, e.g.
+// in {Project}), and a watcher that is still arming cannot be disposed until
+// its start completes. Awaiting the in-flight starts lets those queued
+// disposals run — a disposal begins the stop synchronously, which removes the
+// watcher from the registry — so afterwards only genuinely still-running
+// watchers remain visible. Used by the spec harness leak check.
+watchPath.settlePendingTeardown = async function settlePendingTeardown() {
+  const manager = PathWatcherManager.activeManager;
+  if (!manager) return;
+  // Settling a start can trigger disposals that start replacement watchers
+  // (e.g. registry splits); iterate until nothing is left mid-start.
+  for (let i = 0; i < 10; i++) {
+    const starting = Array.from(manager.live.values())
+      .filter((watcher) => watcher.state === WATCHER_STATE.STARTING && watcher.startPromise)
+      .map((watcher) => watcher.startPromise.catch(() => {}));
+    if (starting.length === 0) return;
+    await Promise.all(starting);
+  }
 };
 
 // Private: Retained for spec compatibility. Backend switching was removed when

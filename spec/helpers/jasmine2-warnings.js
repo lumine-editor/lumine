@@ -9,13 +9,14 @@ exports.register = (jasmineEnv) => {
     ensureNoDeprecatedFunctionCalls();
     ensureNoDeprecatedStylesheets();
 
-    atom.reset().then(() => {
-      if (!window.debugContent) {
-        document.getElementById("jasmine-content").innerHTML = "";
-      }
-      warnIfLeakingPathSubscriptions();
-
-      done();
-    }, done.fail);
+    atom
+      .reset()
+      .then(() => {
+        if (!window.debugContent) {
+          document.getElementById("jasmine-content").innerHTML = "";
+        }
+        return warnIfLeakingPathSubscriptions();
+      })
+      .then(() => done(), done.fail);
   });
 };
