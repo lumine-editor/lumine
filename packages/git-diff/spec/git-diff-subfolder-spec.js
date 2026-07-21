@@ -1,6 +1,7 @@
 const path = require("path");
 const fs = require("@lumine-code/fs-plus");
 const temp = require("@lumine-code/temp").track();
+const { stopAllWatchers } = require("../../../src/path-watcher");
 
 describe("GitDiff when targeting nested repository", () => {
   let editor, editorElement, projectPath, screenUpdates;
@@ -41,7 +42,18 @@ describe("GitDiff when targeting nested repository", () => {
   });
 
   afterEach(() => {
-    temp.cleanup();
+    waitsForPromise(async () => {
+      // Deleting a still-watched directory is refused on Windows, and watched
+      // roots vanishing beneath the file-watcher worker has crashed it on
+      // macOS. Wait for the arms to settle (an arming watch cannot be
+      // stopped), release every native watcher, and only then delete the
+      // temp roots.
+      await Promise.allSettled(
+        atom.project.getPaths().map((projectPath) => atom.project.getWatcherPromise(projectPath)),
+      );
+      await stopAllWatchers();
+      temp.cleanup();
+    });
   });
 
   describe("When git-diff targets a file in a nested git-repository", () => {

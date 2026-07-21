@@ -55,9 +55,12 @@ module.exports = class Project extends Model {
     }
     this.repositoryRegistry.detachProject(this);
     for (let path in this.watcherPromisesByPath) {
-      this.watcherPromisesByPath[path].then((watcher) => {
-        watcher.dispose();
-      });
+      this.watcherPromisesByPath[path].then(
+        (watcher) => {
+          watcher.dispose();
+        },
+        () => {},
+      );
     }
     this.rootDirectories = [];
   }
@@ -336,9 +339,12 @@ module.exports = class Project extends Model {
     this.rootDirectories = [];
 
     for (let path in this.watcherPromisesByPath) {
-      this.watcherPromisesByPath[path].then((watcher) => {
-        watcher.dispose();
-      });
+      this.watcherPromisesByPath[path].then(
+        (watcher) => {
+          watcher.dispose();
+        },
+        () => {},
+      );
     }
     this.watcherPromisesByPath = {};
 
@@ -415,16 +421,24 @@ module.exports = class Project extends Model {
     // We'll use the directory's custom onDidChangeFiles callback, if available.
     // CustomDirectory::onDidChangeFiles should match the signature of
     // Project::onDidChangeFiles below (although it may resolve asynchronously)
-    this.watcherPromisesByPath[directory.getPath()] =
+    const watcherPromise =
       directory.onDidChangeFiles != null
         ? Promise.resolve(directory.onDidChangeFiles(didChangeCallback))
         : watchPath(directory.getPath(), {}, didChangeCallback);
+    // A watch that fails to arm (root deleted mid-arm, watcher-worker restart)
+    // must not surface as an unhandled rejection attributed to unrelated work;
+    // consumers still observe the failure through getWatcherPromise.
+    watcherPromise.catch(() => {});
+    this.watcherPromisesByPath[directory.getPath()] = watcherPromise;
 
     for (let watchedPath in this.watcherPromisesByPath) {
       if (!this.rootDirectories.find((dir) => dir.getPath() === watchedPath)) {
-        this.watcherPromisesByPath[watchedPath].then((watcher) => {
-          watcher.dispose();
-        });
+        this.watcherPromisesByPath[watchedPath].then(
+          (watcher) => {
+            watcher.dispose();
+          },
+          () => {},
+        );
       }
     }
 
@@ -516,7 +530,10 @@ module.exports = class Project extends Model {
     if (indexToRemove != null) {
       this.rootDirectories.splice(indexToRemove, 1);
       if (this.watcherPromisesByPath[projectPath] != null) {
-        this.watcherPromisesByPath[projectPath].then((w) => w.dispose());
+        this.watcherPromisesByPath[projectPath].then(
+          (w) => w.dispose(),
+          () => {},
+        );
       }
       delete this.watcherPromisesByPath[projectPath];
       this.repositoryRegistry.setProjectRoots(this.rootDirectories);
