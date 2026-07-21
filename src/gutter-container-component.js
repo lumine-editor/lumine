@@ -228,6 +228,21 @@ class LineNumberGutterComponent {
     }
   }
 
+  destroy() {
+    // The adopted element belongs to the Gutter model and is re-adopted by a
+    // fresh component when the gutter is hidden and shown again; remove the
+    // children and listeners this component installed so re-adoption starts
+    // clean, but leave any foreign nodes packages may have added.
+    this.element.removeEventListener("mousedown", this.didMouseDown);
+    this.element.removeEventListener("mousemove", this.didMouseMove);
+    this.placeholderElement.remove();
+    this.tilesById.forEach((tile) => {
+      tile.element.remove();
+    });
+    this.tilesById.clear();
+    this.element.remove();
+  }
+
   updateGutter() {
     const { height, className, maxDigits, showLineNumbers } = this.props;
 

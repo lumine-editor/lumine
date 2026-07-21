@@ -844,6 +844,25 @@ describe("TextEditorComponent", () => {
       expect(element.querySelector(".line-number")).toBe(null);
     });
 
+    it("does not duplicate gutter content when the line number gutter is hidden and shown again", async () => {
+      const { component, element, editor } = buildComponent();
+      const gutterElement = editor.getLineNumberGutter().getElement();
+      const dummyCount = gutterElement.querySelectorAll(".line-number.dummy").length;
+      const lineNumberCount = gutterElement.querySelectorAll(".line-number").length;
+      expect(dummyCount).toBe(1);
+      expect(lineNumberCount).toBeGreaterThan(1);
+
+      editor.setLineNumberGutterVisible(false);
+      await component.getNextUpdatePromise();
+      expect(element.contains(gutterElement)).toBe(false);
+
+      editor.setLineNumberGutterVisible(true);
+      await component.getNextUpdatePromise();
+      expect(element.contains(gutterElement)).toBe(true);
+      expect(gutterElement.querySelectorAll(".line-number.dummy").length).toBe(dummyCount);
+      expect(gutterElement.querySelectorAll(".line-number").length).toBe(lineNumberCount);
+    });
+
     it("does not render the line numbers but still renders the line number gutter if showLineNumbers is false", async () => {
       function checkScrollContainerLeft(component) {
         const { scrollContainer, gutterContainer } = component.refs;
