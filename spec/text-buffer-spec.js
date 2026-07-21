@@ -2457,23 +2457,50 @@ three\
       bufferToChange.saveAs(newPath);
     });
 
-    it("notifies observers when the buffer's file is moved", async function () {
-      // FIXME: This doesn't pass on Linux
-      if (["linux", "win32"].includes(process.platform)) {
-        return;
-      }
+    // Watcher-event round-trips on a loaded CI runner can far exceed the
+    // default spec deadline.
+    const MOVE_NOTIFICATION_DEADLINE = 30000;
 
-      // The file watcher arms asynchronously; wait for it before moving the file
-      // so the rename is observed.
-      await bufferToChange.getFileWatchStartPromise();
+    it(
+      "notifies observers when the buffer's file is moved",
+      async function () {
+        // FIXME: This doesn't pass on Linux
+        if (["linux", "win32"].includes(process.platform)) {
+          return;
+        }
 
-      const renamed = new Promise((resolve) => bufferToChange.onDidChangePath(resolve));
+        // The file watcher arms asynchronously; wait for it before moving the
+        // file so the rename is observed.
+        await bufferToChange.getFileWatchStartPromise();
 
-      fs.removeSync(newPath);
-      fs.moveSync(filePath, newPath);
+        // The arm promise confirms the watch handle exists, but a macOS
+        // FSEvents stream can still drop events delivered in its start-up
+        // window. Prove the watch is delivering before the move: write to the
+        // file (retrying with fresh content) until the buffer reloads.
+        await new Promise((resolve) => {
+          let probeCount = 0;
+          const subscription = bufferToChange.onDidReload(() => {
+            subscription.dispose();
+            clearInterval(probeTimer);
+            resolve();
+          });
+          const probe = () => {
+            probeCount++;
+            fs.writeFileSync(filePath, `probe ${probeCount}`);
+          };
+          const probeTimer = setInterval(probe, 500);
+          probe();
+        });
 
-      expect(await renamed).toBe(newPath);
-    });
+        const renamed = new Promise((resolve) => bufferToChange.onDidChangePath(resolve));
+
+        fs.removeSync(newPath);
+        fs.moveSync(filePath, newPath);
+
+        expect(await renamed).toBe(newPath);
+      },
+      MOVE_NOTIFICATION_DEADLINE,
+    );
   });
 
   // This spec is no longer needed because `onWillThrowWatchError` is a no-op.
