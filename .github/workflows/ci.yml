@@ -41,15 +41,19 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-          cache: yarn
+          cache: npm
+      # npm records the @lumine-code git forks with ssh URLs, but the runner has
+      # no ssh key. Rewrite them to anonymous HTTPS (the forks are public).
+      - name: Use HTTPS for GitHub git dependencies
+        run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
       # Linting needs the dev dependencies but no native builds, so skip install
       # scripts (Electron download, node-gyp, patch-package) for a fast job.
       - name: Install dependencies
-        run: yarn install --frozen-lockfile --ignore-scripts
+        run: npm ci --ignore-scripts
       - name: Lint
-        run: yarn lint
+        run: npm run lint
       - name: Check formatting
-        run: yarn format:check
+        run: npm run format:check
 
   test:
     name: Test on ${{ matrix.os }}
@@ -75,7 +79,7 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-          cache: yarn
+          cache: npm
       - name: Install Linux build and headless-display dependencies
         if: runner.os == 'Linux'
         # fonts-noto-cjk backs the editor's double-width/half-width/Korean
@@ -88,21 +92,25 @@ jobs:
       # the native modules are rebuilt for Electron below regardless. Install
       # without scripts, then reproduce the pieces we actually need.
       #
-      # Preparing the many git-hosted `@lumine-code` forks is flaky on Windows
-      # (yarn classic intermittently fails packing a git dependency with
-      # `ENOENT ... .yarn-tarball.tgz`). Serialize the work and retry a couple
-      # of times to absorb it.
+      # npm records the @lumine-code git forks with ssh URLs, but the runners
+      # have no ssh key. Rewrite them to anonymous HTTPS (the forks are public).
+      - name: Use HTTPS for GitHub git dependencies
+        shell: bash
+        run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
+      # Preparing the many git-hosted `@lumine-code` forks can be flaky on
+      # Windows (intermittent network or pack failures while cloning a git
+      # dependency). Retry a couple of times to absorb it.
       - name: Install dependencies
         shell: bash
         run: |
-          install() { yarn install --frozen-lockfile --ignore-scripts --network-concurrency 1; }
+          install() { npm ci --ignore-scripts; }
           install || install || install
       - name: Apply patches
         run: npx patch-package
       - name: Download the Electron binary
         run: node ./node_modules/electron/install.js
       - name: Rebuild native modules for Electron
-        run: yarn build
+        run: npm run build
       # A single full-suite Electron session, capped so a wedged session cannot
       # hang the job. No retries and no per-file fallback: a failure here is a
       # real regression or a flaky spec, and flaky specs get fixed rather than
@@ -118,7 +126,7 @@ jobs:
           if command -v timeout >/dev/null 2>&1; then guard="timeout 2700"
           elif command -v gtimeout >/dev/null 2>&1; then guard="gtimeout 2700"
           else guard=""; fi
-          $guard $prefix yarn test:editor
+          $guard $prefix npm run test:editor
       # The main-process (Electron main) suite runs under Mocha in a single
       # short session (a few seconds). Like the editor specs it runs once with a
       # timeout guard; a failure here is a real regression, not a retry target.
@@ -131,9 +139,9 @@ jobs:
           if command -v timeout >/dev/null 2>&1; then guard="timeout 600"
           elif command -v gtimeout >/dev/null 2>&1; then guard="gtimeout 600"
           else guard=""; fi
-          $guard $prefix yarn test:main
+          $guard $prefix npm run test:main
       # Run each bundled package in its own Electron session. The combined
-      # `yarn test:pkgs` session suffers cross-package state leakage (~200
+      # `npm run test:pkgs` session suffers cross-package state leakage (~200
       # spurious failures) and has hung CI runners; per-package isolation
       # matches how the packages are developed and verified. The `timeout`
       # guard turns any hung package into a fast failure with logs intact.
@@ -160,7 +168,7 @@ jobs:
             echo "::group::$pkg"
             # Run once. A failure here is a real regression or a flaky spec;
             # flaky specs get fixed at the source rather than retried away.
-            if ! $guard $prefix yarn start --test "$d"; then
+            if ! $guard $prefix npm start -- --test "$d"; then
               echo "::error::Package specs failed: $pkg"
               failed="$failed $pkg"
               status=1

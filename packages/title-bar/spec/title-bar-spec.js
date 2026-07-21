@@ -53,7 +53,7 @@ describe("Title Bar package", () => {
     // Safe mode wins even when a source checkout also reports dev/source.
     expect(resolveLaunchMode({ sourceMode: true, devMode: true, safeMode: true })).toBe("safe");
     expect(resolveLaunchMode({ sourceMode: false, devMode: false, safeMode: true })).toBe("safe");
-    // `yarn start` reports both source and dev; source marks it distinctly.
+    // `npm start` reports both source and dev; source marks it distinctly.
     expect(resolveLaunchMode({ sourceMode: true, devMode: true, safeMode: false })).toBe("source");
     // A bare dev window (packaged build) has neither safe nor source set.
     expect(resolveLaunchMode({ sourceMode: false, devMode: true, safeMode: false })).toBe("dev");

@@ -116,7 +116,7 @@ let options = {
     "!**/{.eslintignore,PULL_REQUEST_TEMPLATE.md,ISSUE_TEMPLATE.md,CONTRIBUTING.md,SECURITY.md}",
 
     // Development Tools Exclusions
-    "!**/{npm-debug.log,yarn.lock,.yarn-integrity,.yarn-metadata.json,.npmignore}",
+    "!**/{npm-debug.log,package-lock.json,yarn.lock,.yarn-integrity,.yarn-metadata.json,.npmignore}",
     "!**/npm/{doc,html,man}",
     "!.editorconfig",
     "!**/{appveyor.yml,.travis.yml,circle.yml}",

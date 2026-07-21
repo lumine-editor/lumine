@@ -41,30 +41,35 @@ jobs:
       - uses: actions/setup-node@v6
         with:
           node-version-file: .nvmrc
-          cache: yarn
+          cache: npm
       - name: Install Linux build dependencies
         if: runner.os == 'Linux'
         run: |
           sudo apt-get update
           sudo apt-get install -y libx11-dev libxkbfile-dev libsecret-1-dev
+      # npm records the @lumine-code git forks with ssh URLs, but the runners
+      # have no ssh key. Rewrite them to anonymous HTTPS (the forks are public).
+      - name: Use HTTPS for GitHub git dependencies
+        shell: bash
+        run: git config --global url."https://github.com/".insteadOf "ssh://git@github.com/"
       # Same install sequence as ci.yml's test job: skip the failing/wasted
-      # install scripts, then reproduce the pieces we need. Serialize and retry
-      # to absorb the flaky git-dependency packing on Windows.
+      # install scripts, then reproduce the pieces we need. Retry to absorb the
+      # occasionally flaky git-dependency fetches on Windows.
       - name: Install dependencies
         shell: bash
         run: |
-          install() { yarn install --frozen-lockfile --ignore-scripts --network-concurrency 1; }
+          install() { npm ci --ignore-scripts; }
           install || install || install
       - name: Apply patches
         run: npx patch-package
       - name: Download the Electron binary
         run: node ./node_modules/electron/install.js
       - name: Rebuild native modules for Electron
-        run: yarn build
+        run: npm run build
       # No GH_TOKEN here, so electron-builder does not auto-publish; the draft
       # release is created explicitly in the release job below.
       - name: Build distributable binaries
-        run: yarn dist
+        run: npm run dist
       - name: Upload binaries
         uses: actions/upload-artifact@v6
         with:

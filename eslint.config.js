@@ -96,7 +96,7 @@ module.exports = [
     rules: { "n/no-process-exit": "off" },
   },
   {
-    // Completion-data build scripts (run manually via `yarn update`) require
+    // Completion-data build scripts (run manually via `npm run update`) require
     // update-time-only devDependencies that are not installed in the workspace,
     // and legitimately call process.exit(). Don't flag their resolution here.
     files: ["**/update/**"],

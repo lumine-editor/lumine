@@ -14,8 +14,8 @@
   dependency for `@babel/parser` (which produces a compatible AST). No
   `descriptionMoreURL` is emitted: there is no Lumine API reference site to link to.
 
-  Run with `yarn update` (or `npm run update`) from this package directory, after
-  installing this package's dev dependencies.
+  Run with `npm run update` from this package directory, after installing this
+  package's dev dependencies.
 */
 
 const fs = require("fs");

@@ -80,7 +80,7 @@ async function main() {
   if (atom.getReleaseChannel() !== "stable") {
     // This would only be the case if
     //
-    // * `yarn start` was used by a developer,
+    // * `npm start` was used by a developer,
     // * someone built a local binary without removing `-dev` from the version,
     //   or
     // * someone was using a preview build of LumineNext.

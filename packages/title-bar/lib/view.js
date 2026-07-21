@@ -69,7 +69,7 @@ function calculateAvailableMenuWidth(menuRect, titleRect, leadingWidth, titleGap
 function resolveLaunchMode({ devMode, safeMode, sourceMode }) {
   // Safe mode is a warning state and always wins. From a source checkout
   // `sourceMode` (Electron's unpackaged `process.defaultApp`) is true even
-  // though `--dev` is also set, so it must outrank dev to mark `yarn start`
+  // though `--dev` is also set, so it must outrank dev to mark `npm start`
   // distinctly; a bare `--dev` window only appears in packaged builds.
   if (safeMode) return "safe";
   if (sourceMode) return "source";
