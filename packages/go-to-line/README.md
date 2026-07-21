@@ -6,7 +6,8 @@ Jump the cursor to a specific line number in the editor.
 
 - **Line navigation**: moves the cursor to the line number you type.
 - **Column support**: accepts `line:column` input to place the cursor at a specific column.
-- **Numeric input**: restricts entry to digits and colons for quick, error-free navigation.
+- **Range selection**: accepts `line:column-line:column` input to select from the first position to the second, following the direction you type.
+- **Numeric input**: restricts entry to digits, colons, and dashes for quick, error-free navigation.
 
 ## Commands
 

@@ -34,7 +34,7 @@ describe("GoToLine", () => {
   });
 
   describe("when entering a line number", () => {
-    it("only allows 0-9 and the colon character to be entered in the mini editor", () => {
+    it("only allows 0-9, colon, and dash characters to be entered in the mini editor", () => {
       expect(goToLine.miniEditor.getText()).toBe("");
       goToLine.miniEditor.insertText("a");
       expect(goToLine.miniEditor.getText()).toBe("");
@@ -45,6 +45,41 @@ describe("GoToLine", () => {
       goToLine.miniEditor.setText("");
       goToLine.miniEditor.insertText("4");
       expect(goToLine.miniEditor.getText()).toBe("4");
+      goToLine.miniEditor.insertText("-");
+      expect(goToLine.miniEditor.getText()).toBe("4-");
+    });
+  });
+
+  describe("when entering a range", () => {
+    it("selects from the start position to the end position", () => {
+      goToLine.miniEditor.insertText("3:8-4:1");
+      atom.commands.dispatch(goToLine.miniEditor.element, "core:confirm");
+      expect(editor.getSelectedBufferRange()).toEqual([
+        [2, 7],
+        [3, 0],
+      ]);
+      expect(editor.getLastSelection().isReversed()).toBe(false);
+      expect(editor.getCursorBufferPosition()).toEqual([3, 0]);
+    });
+
+    it("makes a reversed selection when the end is before the start", () => {
+      goToLine.miniEditor.insertText("4:1-3:8");
+      atom.commands.dispatch(goToLine.miniEditor.element, "core:confirm");
+      expect(editor.getSelectedBufferRange()).toEqual([
+        [2, 7],
+        [3, 0],
+      ]);
+      expect(editor.getLastSelection().isReversed()).toBe(true);
+      expect(editor.getCursorBufferPosition()).toEqual([2, 7]);
+    });
+
+    it("does not select until the end of the range is typed", () => {
+      goToLine.miniEditor.insertText("3:8-");
+      expect(editor.getSelectedBufferRange()).toEqual([
+        [2, 7],
+        [2, 7],
+      ]);
+      expect(editor.getCursorBufferPosition()).toEqual([2, 7]);
     });
   });
 

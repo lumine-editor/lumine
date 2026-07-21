@@ -4,7 +4,7 @@ import { Point } from "atom";
 const { InputDialogView } = require("@lumine-code/select-list");
 
 const HELP_MESSAGE =
-  'Enter a <row> or <row>:<column> to go there. Examples: "3" for row 3 or "2:7" for row 2 and column 7';
+  'Enter a <row> or <row>:<column> to go there, or <row>:<column>-<row>:<column> to select.\nExamples: "3" for row 3, "2:7" for row 2 and column 7, or "2:7-4:1" to select from row 2 column 7 to row 4 column 1';
 
 class GoToLineView {
   constructor() {
@@ -17,7 +17,7 @@ class GoToLineView {
     });
     this.miniEditor = this.inputDialogView.refs.queryEditor;
     this.miniEditor.onWillInsertText((arg) => {
-      if (arg.text.match(/[^0-9:]/)) {
+      if (arg.text.match(/[^-0-9:]/)) {
         arg.cancel();
       }
     });
@@ -47,27 +47,55 @@ class GoToLineView {
     this.inputDialogView.hide();
   }
 
+  // Parse a `<row>` or `<row>:<column>` fragment into 0-based coordinates.
+  // A missing row falls back to the current row; a missing column is returned
+  // as -1 so the caller can decide how to resolve it.
+  parseFragment(text, currentRow) {
+    const [rowText = "", columnText = ""] = text.split(/:+/);
+    const row = rowText.length > 0 ? parseInt(rowText, 10) - 1 : currentRow;
+    const column = columnText.length > 0 ? parseInt(columnText, 10) - 1 : -1;
+    return new Point(row, column);
+  }
+
   navigate(options = {}) {
-    const lineNumber = this.miniEditor.getText();
+    const input = this.miniEditor.getText();
     const editor = atom.workspace.getActiveTextEditor();
     if (!options.keepOpen) {
       this.close();
     }
-    if (!editor || !lineNumber.length) return;
+    if (!editor || !input.length) return;
 
     const currentRow = editor.getCursorBufferPosition().row;
-    const rowLineNumber = lineNumber.split(/:+/)[0] || "";
-    const row = rowLineNumber.length > 0 ? parseInt(rowLineNumber) - 1 : currentRow;
-    const columnLineNumber = lineNumber.split(/:+/)[1] || "";
-    const column = columnLineNumber.length > 0 ? parseInt(columnLineNumber) - 1 : -1;
+    const dashIndex = input.indexOf("-");
 
-    const position = new Point(row, column);
-    editor.setCursorBufferPosition(position);
-    editor.unfoldBufferRow(row);
-    if (column < 0) {
+    // `<start>-<end>` selects a range; `start` is the anchor and `end` is where
+    // the cursor lands, so the selection follows the direction that was typed.
+    if (dashIndex >= 0 && input.slice(dashIndex + 1).length > 0) {
+      const anchor = this.parseFragment(input.slice(0, dashIndex), currentRow);
+      const head = this.parseFragment(input.slice(dashIndex + 1), currentRow);
+      const tail = new Point(anchor.row, Math.max(anchor.column, 0));
+      const cursor = new Point(head.row, Math.max(head.column, 0));
+      const reversed = cursor.isLessThan(tail);
+
+      editor.unfoldBufferRow(tail.row);
+      editor.unfoldBufferRow(cursor.row);
+      editor.setSelectedBufferRange(reversed ? [cursor, tail] : [tail, cursor], { reversed });
+      editor.scrollToBufferPosition(cursor, { center: true });
+      return;
+    }
+
+    // A plain position (optionally the start of an incomplete range) moves the
+    // cursor, matching the original behavior.
+    const target = this.parseFragment(
+      dashIndex >= 0 ? input.slice(0, dashIndex) : input,
+      currentRow,
+    );
+    editor.setCursorBufferPosition(target);
+    editor.unfoldBufferRow(target.row);
+    if (target.column < 0) {
       editor.moveToFirstCharacterOfLine();
     }
-    editor.scrollToBufferPosition(position, {
+    editor.scrollToBufferPosition(target, {
       center: true,
     });
   }

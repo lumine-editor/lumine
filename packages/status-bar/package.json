@@ -3,14 +3,13 @@
   "author": "lumine-code",
   "version": "1.0.0",
   "main": "./lib/main",
-  "description": "Display information about the current editor such as cursor position, file path, grammar, current branch, ahead/behind commits counts, and line diff count.",
+  "description": "Host the status bar at the bottom of the workspace and provide a service other packages add indicator tiles to.",
   "repository": "https://github.com/lumine-code/lumine",
   "license": "MIT",
   "engines": {
     "atom": "*"
   },
   "dependencies": {
-    "@lumine-code/fs-plus": "https://github.com/lumine-code/fs-plus.git#742e3e166f56261189ff245a63967b8f1970fadd",
     "grim": "^2.0.1"
   },
   "providedServices": {
@@ -30,29 +29,8 @@
       "type": "boolean",
       "default": true
     },
-    "positionFormat": {
-      "order": 2,
-      "title": "Position Format",
-      "description": "Format for the cursor position in the editor status bar element, where %L is the line number and %C is the column number of the last cursor",
-      "type": "string",
-      "default": "%L:%C"
-    },
-    "selectionFormat": {
-      "order": 3,
-      "title": "Selection Format",
-      "description": "Format appended when the selection is not empty, where %L is the selected line count and %C is the selected character count",
-      "type": "string",
-      "default": ":%L:%C"
-    },
-    "multipleFormat": {
-      "order": 4,
-      "title": "Multiple Cursors Format",
-      "description": "Format appended when there is more than one cursor, where %n is the number of cursors",
-      "type": "string",
-      "default": " #%n"
-    },
     "isVisible": {
-      "order": 5,
+      "order": 2,
       "title": "Is Visible",
       "description": "Show status bar at the bottom of the workspace",
       "type": "boolean",

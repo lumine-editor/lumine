@@ -1,8 +1,6 @@
 const { CompositeDisposable, Emitter } = require("atom");
 const Grim = require("grim");
 const StatusBarView = require("./status-bar-view");
-const FileInfoView = require("./file-info-view");
-const EditorPositionView = require("./editor-position-view");
 
 module.exports = {
   activate() {
@@ -31,23 +29,11 @@ module.exports = {
         atom.config.set("status-bar.isVisible", true);
       }
     });
-
-    this.fileInfo = new FileInfoView();
-    this.statusBar.addLeftTile({ item: this.fileInfo.element, priority: 40 });
-
-    this.editorPosition = new EditorPositionView();
-    this.statusBar.addLeftTile({ item: this.editorPosition.element, priority: 50 });
   },
 
   deactivate() {
     this.statusBarVisibilitySubscription?.dispose();
     this.statusBarVisibilitySubscription = null;
-
-    this.fileInfo?.destroy();
-    this.fileInfo = null;
-
-    this.editorPosition?.destroy();
-    this.editorPosition = null;
 
     this.statusBarPanel?.destroy();
     this.statusBarPanel = null;

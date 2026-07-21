@@ -1,12 +1,12 @@
 # status-bar
 
-Display information about the current editor such as cursor position, file path, grammar, and selection count.
+Host the status bar at the bottom of the workspace and provide a service other packages add indicator tiles to.
 
 ## Features
 
-- **Editor position**: shows the cursor line and column, the selection size when text is selected, and the cursor count when there is more than one.
-- **File info**: shows the path and grammar of the current editor.
-- **Tile host**: lets other packages add custom tiles to the left or right side of the bar.
+- **Tile host**: lets other packages add custom tiles to the left or right side of the bar, ordered by priority.
+- **Toggle**: show or hide the whole status bar with a command.
+- **Full-width**: fit the bar to the window width or to the active editor.
 
 ## Commands
 

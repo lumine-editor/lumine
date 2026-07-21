@@ -70,15 +70,6 @@ status-bar {
     padding-right: 0;
   }
 
-  /* No width limit for file-info -> will get cut off if too long */
-  .inline-block.file-info {
-    max-width: none;
-  }
-
-  .file-info.buffer-modified::after {
-    content: "*";
-  }
-
   /* All icons are smaller than normal (normal is 16px)
      (Expanded Less mixin `.icon-size(14px)`) */
   .icon:before {
@@ -97,13 +88,7 @@ status-bar {
     margin-right: -1px;
   }
 
-  .hide,
-  .current-path:empty {
+  .hide {
     display: none;
-  }
-
-  .editor-position a,
-  .editor-position a:hover {
-    color: var(--text-color);
   }
 }
