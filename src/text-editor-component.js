@@ -1,4 +1,3 @@
-const etch = require("@lumine-code/etch");
 const { Point, Range } = require("./text-buffer");
 const LineTopIndex = require("line-top-index");
 const TextEditor = require("./text-editor");
@@ -6,7 +5,6 @@ const ScrollAnimator = require("./scroll-animator");
 const { isPairedCharacter, hasRtlText } = require("./text-utils");
 const electron = require("electron");
 const clipboard = electron.clipboard;
-const $ = etch.dom;
 
 let TextEditorElement;
 
@@ -83,8 +81,6 @@ module.exports = class TextEditorComponent {
       this.element = TextEditorElement.createTextEditorElement();
     }
     this.element.initialize(this);
-    this.virtualNode = $("atom-text-editor");
-    this.virtualNode.domNode = this.element;
     this.refs = {};
 
     this.updateSync = this.updateSync.bind(this);
@@ -104,6 +100,7 @@ module.exports = class TextEditorComponent {
     this.updatedSynchronously = this.props.updatedSynchronously;
     this.didScrollDummyScrollbar = this.didScrollDummyScrollbar.bind(this);
     this.didMouseDownOnContent = this.didMouseDownOnContent.bind(this);
+    this.didMouseWheel = this.didMouseWheel.bind(this);
     this.debouncedResumeCursorBlinking = debounce(
       this.resumeCursorBlinking.bind(this),
       this.props.cursorBlinkResumeDelay || CURSOR_BLINK_RESUME_DELAY,
@@ -226,7 +223,8 @@ module.exports = class TextEditorComponent {
     this.queryMaxLineNumberDigits();
     this.observeBlockDecorations();
     this.updateClassList();
-    etch.updateSync(this);
+    this.buildShell();
+    this.renderSync();
   }
 
   update(props) {
@@ -409,7 +407,9 @@ module.exports = class TextEditorComponent {
 
       if (this.resizeBlockDecorationMeasurementsArea) {
         this.resizeBlockDecorationMeasurementsArea = false;
-        this.refs.blockDecorationMeasurementArea.style.width = this.getScrollWidth() + "px";
+        const width = this.getScrollWidth() + "px";
+        this.refs.blockDecorationMeasurementArea.style.width = width;
+        this.lastBlockDecorationMeasurementAreaWidth = width;
       }
 
       this.blockDecorationsToMeasure.forEach((decoration) => {
@@ -461,7 +461,7 @@ module.exports = class TextEditorComponent {
     this.queryDecorationsToRender();
     this.queryExtraScreenLinesToRender();
     this.shouldRenderDummyScrollbars = !this.remeasureScrollbars;
-    etch.updateSync(this);
+    this.renderSync();
     this.updateClassList();
     this.shouldRenderDummyScrollbars = true;
     this.didMeasureVisibleBlockDecoration = false;
@@ -504,7 +504,7 @@ module.exports = class TextEditorComponent {
 
   updateSyncAfterMeasuringContent() {
     this.derivedDimensionsCache = {};
-    etch.updateSync(this);
+    this.renderSync();
 
     this.currentFrameLineNumberGutterProps = null;
     this.scrollTopPending = false;
@@ -520,20 +520,188 @@ module.exports = class TextEditorComponent {
 
       this.measureScrollbarDimensions();
       this.remeasureScrollbars = false;
-      etch.updateSync(this);
+      this.renderSync();
     }
 
     this.derivedDimensionsCache = {};
     if (this.resolveNextUpdatePromise) this.resolveNextUpdatePromise();
   }
 
-  render() {
-    const { model } = this.props;
-    const style = {};
+  // Builds the static DOM shell once, at construction. All dynamic
+  // attributes, styles, and child component lifecycles are handled by
+  // renderSync. The class name of the root element is managed separately by
+  // this.updateClassList().
+  buildShell() {
+    this.rootCache = {};
+    this.clientContainerCache = {};
+    this.scrollContainerCache = {};
+    this.contentCache = {};
+    this.lineTilesCache = {};
+    this.lineTileComponentsById = new Map();
+    this.extraLineComponentsByKey = new Map();
+    this.overlayComponentsByElement = new Map();
+    this.placeholderTextElement = null;
+    this.lastPlaceholderText = null;
+    this.lastBlockDecorationMeasurementAreaWidth = null;
 
-    if (!model.getAutoHeight() && !model.getAutoWidth()) {
-      style.contain = "size";
+    this.element.tabIndex = -1;
+    this.element.addEventListener("wheel", this.didMouseWheel);
+
+    const clientContainer = document.createElement("div");
+    let style = clientContainer.style;
+    style.position = "relative";
+    style.contain = "strict";
+    style.overflow = "hidden";
+    style.backgroundColor = "inherit";
+    this.refs.clientContainer = clientContainer;
+    this.element.appendChild(clientContainer);
+
+    const scrollContainer = document.createElement("div");
+    scrollContainer.className = "scroll-view";
+    style = scrollContainer.style;
+    style.position = "absolute";
+    style.contain = "strict";
+    style.overflow = "hidden";
+    style.top = 0;
+    style.bottom = 0;
+    style.backgroundColor = "inherit";
+    this.refs.scrollContainer = scrollContainer;
+    clientContainer.appendChild(scrollContainer);
+
+    const content = document.createElement("div");
+    content.addEventListener("mousedown", this.didMouseDownOnContent);
+    style = content.style;
+    style.contain = "strict";
+    style.overflow = "hidden";
+    style.backgroundColor = "inherit";
+    this.refs.content = content;
+    scrollContainer.appendChild(content);
+
+    const lineTiles = document.createElement("div");
+    lineTiles.className = "lines";
+    style = lineTiles.style;
+    style.position = "absolute";
+    style.contain = "strict";
+    style.overflow = "hidden";
+    this.refs.lineTiles = lineTiles;
+    content.appendChild(lineTiles);
+
+    this.highlightsComponent = new HighlightsComponent(this.buildHighlightsProps());
+    lineTiles.appendChild(this.highlightsComponent.element);
+
+    const cursorsAndInputComponent = new CursorsAndInputComponent(this.buildCursorsAndInputProps());
+    this.refs.cursorsAndInput = cursorsAndInputComponent;
+    lineTiles.appendChild(cursorsAndInputComponent.element);
+
+    const blockDecorationMeasurementArea = document.createElement("div");
+    style = blockDecorationMeasurementArea.style;
+    style.contain = "strict";
+    style.position = "absolute";
+    style.visibility = "hidden";
+    this.refs.blockDecorationMeasurementArea = blockDecorationMeasurementArea;
+    content.appendChild(blockDecorationMeasurementArea);
+
+    content.appendChild(this.buildCharacterMeasurementLine());
+  }
+
+  buildCharacterMeasurementLine() {
+    const characterMeasurementLine = document.createElement("div");
+    characterMeasurementLine.className = "line dummy";
+    characterMeasurementLine.style.position = "absolute";
+    characterMeasurementLine.style.visibility = "hidden";
+    this.refs.characterMeasurementLine = characterMeasurementLine;
+
+    // We used to put each of these characters inside the same block-level
+    // element, but that resulted in different, less-accurate measurements
+    // than when they each exist in isolation.
+    const measurementSpans = [
+      ["normalWidthCharacterSpan", NORMAL_WIDTH_CHARACTER],
+      ["doubleWidthCharacterSpan", DOUBLE_WIDTH_CHARACTER],
+      ["halfWidthCharacterSpan", HALF_WIDTH_CHARACTER],
+      ["koreanCharacterSpan", KOREAN_CHARACTER],
+    ];
+    for (const [ref, character] of measurementSpans) {
+      const wrapper = document.createElement("div");
+      const span = document.createElement("span");
+      span.textContent = character;
+      this.refs[ref] = span;
+      wrapper.appendChild(span);
+      characterMeasurementLine.appendChild(wrapper);
     }
+
+    return characterMeasurementLine;
+  }
+
+  // Flushes the editor's state to the DOM: the manual equivalent of the
+  // virtual-DOM diff this component previously performed. Regions are visited
+  // in the same top-down order the diff used so that event and lifecycle
+  // timing are unchanged.
+  renderSync() {
+    this.updateRootElement();
+    this.updateClientContainerElement();
+    this.syncGutterContainer();
+    this.updateScrollContainerElement();
+    this.updateContentElement();
+    this.updateLineTilesElement();
+    this.highlightsComponent.update(this.buildHighlightsProps());
+    this.syncLineTiles();
+    this.refs.cursorsAndInput.update(this.buildCursorsAndInputProps());
+    this.updateBlockDecorationMeasurementArea();
+    this.syncDummyScrollbars();
+    this.syncOverlayDecorations();
+  }
+
+  updateRootElement() {
+    const { model } = this.props;
+    const cache = this.rootCache;
+
+    const contain = !model.getAutoHeight() && !model.getAutoWidth() ? "size" : "";
+    if (contain !== cache.contain) {
+      this.element.style.contain = contain;
+      cache.contain = contain;
+    }
+
+    // In auto-width mode the root width is pinned to min-content. Otherwise
+    // the width is left alone: the previous virtual-DOM diff fed the current
+    // inline width back into itself, i.e. a no-op.
+    if (this.hasInitialMeasurements && model.getAutoWidth() && cache.width !== "min-content") {
+      this.element.style.width = "min-content";
+      cache.width = "min-content";
+    }
+
+    const mini = model.isMini();
+    if (mini !== cache.mini) {
+      if (mini) this.element.setAttribute("mini", "");
+      else this.element.removeAttribute("mini");
+      cache.mini = mini;
+    }
+
+    const readOnly = model.isReadOnly();
+    if (readOnly !== cache.readOnly) {
+      if (readOnly) this.element.setAttribute("readonly", "");
+      else this.element.removeAttribute("readonly");
+      cache.readOnly = readOnly;
+    }
+
+    const encoding = model.getEncoding();
+    if (encoding !== cache.encoding) {
+      this.element.dataset.encoding = encoding;
+      cache.encoding = encoding;
+    }
+
+    const grammar = model.getGrammar();
+    const grammarClass =
+      grammar && grammar.scopeName ? grammar.scopeName.replace(/\./g, " ") : null;
+    if (grammarClass !== cache.grammar) {
+      if (grammarClass == null) delete this.element.dataset.grammar;
+      else this.element.dataset.grammar = grammarClass;
+      cache.grammar = grammarClass;
+    }
+  }
+
+  updateClientContainerElement() {
+    const { model } = this.props;
+    const cache = this.clientContainerCache;
 
     let clientContainerHeight = "100%";
     let clientContainerWidth = "100%";
@@ -543,68 +711,33 @@ module.exports = class TextEditorComponent {
           this.getContentHeight() + this.getHorizontalScrollbarHeight() + "px";
       }
       if (model.getAutoWidth()) {
-        style.width = "min-content";
         clientContainerWidth =
           this.getGutterContainerWidth() +
           this.getContentWidth() +
           this.getVerticalScrollbarWidth() +
           "px";
-      } else {
-        style.width = this.element.style.width;
       }
     }
 
-    let attributes = {};
-    if (model.isMini()) {
-      attributes.mini = "";
+    const style = this.refs.clientContainer.style;
+    if (clientContainerHeight !== cache.height) {
+      style.height = clientContainerHeight;
+      cache.height = clientContainerHeight;
     }
-
-    if (model.isReadOnly()) {
-      attributes.readonly = "";
+    if (clientContainerWidth !== cache.width) {
+      style.width = clientContainerWidth;
+      cache.width = clientContainerWidth;
     }
-
-    const dataset = { encoding: model.getEncoding() };
-    const grammar = model.getGrammar();
-    if (grammar && grammar.scopeName) {
-      dataset.grammar = grammar.scopeName.replace(/\./g, " ");
-    }
-
-    return $(
-      "atom-text-editor",
-      {
-        // See this.updateClassList() for construction of the class name
-        style,
-        attributes,
-        dataset,
-        tabIndex: -1,
-        on: { wheel: this.didMouseWheel },
-      },
-      $.div(
-        {
-          ref: "clientContainer",
-          style: {
-            position: "relative",
-            contain: "strict",
-            overflow: "hidden",
-            backgroundColor: "inherit",
-            height: clientContainerHeight,
-            width: clientContainerWidth,
-          },
-        },
-        this.renderGutterContainer(),
-        this.renderScrollContainer(),
-      ),
-      this.renderOverlayDecorations(),
-    );
   }
 
-  renderGutterContainer() {
+  syncGutterContainer() {
     if (this.props.model.isMini()) {
-      return null;
+      if (this.refs.gutterContainer) {
+        this.refs.gutterContainer.element.remove();
+        delete this.refs.gutterContainer;
+      }
     } else {
-      return $(GutterContainerComponent, {
-        ref: "gutterContainer",
-        key: "gutterContainer",
+      const gutterContainerProps = {
         rootComponent: this,
         hasInitialMeasurements: this.hasInitialMeasurements,
         measuredContent: this.measuredContent,
@@ -621,169 +754,113 @@ module.exports = class TextEditorComponent {
         showLineNumbers: this.showLineNumbers,
         lineNumbersToRender: this.lineNumbersToRender,
         didMeasureVisibleBlockDecoration: this.didMeasureVisibleBlockDecoration,
-      });
+      };
+
+      if (this.refs.gutterContainer) {
+        this.refs.gutterContainer.update(gutterContainerProps);
+      } else {
+        const gutterContainerComponent = new GutterContainerComponent(gutterContainerProps);
+        this.refs.gutterContainer = gutterContainerComponent;
+        this.refs.clientContainer.insertBefore(
+          gutterContainerComponent.element,
+          this.refs.scrollContainer,
+        );
+      }
     }
   }
 
-  renderScrollContainer() {
-    const style = {
-      position: "absolute",
-      contain: "strict",
-      overflow: "hidden",
-      top: 0,
-      bottom: 0,
-      backgroundColor: "inherit",
-    };
+  updateScrollContainerElement() {
+    const cache = this.scrollContainerCache;
 
+    let left = null;
+    let width = null;
+    let right = null;
     if (this.hasInitialMeasurements) {
-      style.left = this.getGutterContainerWidth() + "px";
+      left = this.getGutterContainerWidth() + "px";
       if (this.props.model.getAutoWidth()) {
-        style.width = this.getScrollContainerWidth() + "px";
+        width = this.getScrollContainerWidth() + "px";
       } else {
         // Pin to the live right edge instead of a measured pixel width so the
         // dummy scrollbars stay attached while the editor is resized;
         // measurements only catch up on the next scheduled update.
-        style.right = 0;
+        right = "0px";
       }
     }
 
-    return $.div(
-      {
-        ref: "scrollContainer",
-        key: "scrollContainer",
-        className: "scroll-view",
-        style,
-      },
-      this.renderContent(),
-      this.renderDummyScrollbars(),
-    );
+    const style = this.refs.scrollContainer.style;
+    if (left !== cache.left) {
+      style.left = left == null ? "" : left;
+      cache.left = left;
+    }
+    if (width !== cache.width) {
+      style.width = width == null ? "" : width;
+      cache.width = width;
+    }
+    if (right !== cache.right) {
+      style.right = right == null ? "" : right;
+      cache.right = right;
+    }
   }
 
-  renderContent() {
-    let style = {
-      contain: "strict",
-      overflow: "hidden",
-      backgroundColor: "inherit",
-    };
+  updateContentElement() {
     if (this.hasInitialMeasurements) {
-      style.width = ceilToPhysicalPixelBoundary(this.getScrollWidth()) + "px";
-      style.height = ceilToPhysicalPixelBoundary(this.getScrollHeight()) + "px";
-      style.willChange = "transform";
-      style.transform = `translate(${-roundToPhysicalPixelBoundary(
+      const cache = this.contentCache;
+      const style = this.refs.content.style;
+
+      const width = ceilToPhysicalPixelBoundary(this.getScrollWidth()) + "px";
+      const height = ceilToPhysicalPixelBoundary(this.getScrollHeight()) + "px";
+      const transform = `translate(${-roundToPhysicalPixelBoundary(
         this.getScrollLeft(),
       )}px, ${-roundToPhysicalPixelBoundary(this.getScrollTop())}px)`;
-    }
 
-    return $.div(
-      {
-        ref: "content",
-        on: { mousedown: this.didMouseDownOnContent },
-        style,
-      },
-      this.renderLineTiles(),
-      this.renderBlockDecorationMeasurementArea(),
-      this.renderCharacterMeasurementLine(),
-    );
+      if (width !== cache.width) {
+        style.width = width;
+        cache.width = width;
+      }
+      if (height !== cache.height) {
+        style.height = height;
+        cache.height = height;
+      }
+      if (!cache.willChange) {
+        style.willChange = "transform";
+        cache.willChange = true;
+      }
+      if (transform !== cache.transform) {
+        style.transform = transform;
+        cache.transform = transform;
+      }
+    }
   }
 
-  renderHighlightDecorations() {
-    return $(HighlightsComponent, {
+  updateLineTilesElement() {
+    if (this.hasInitialMeasurements) {
+      const cache = this.lineTilesCache;
+      const style = this.refs.lineTiles.style;
+      const width = this.getScrollWidth() + "px";
+      const height = this.getScrollHeight() + "px";
+      if (width !== cache.width) {
+        style.width = width;
+        cache.width = width;
+      }
+      if (height !== cache.height) {
+        style.height = height;
+        cache.height = height;
+      }
+    }
+  }
+
+  buildHighlightsProps() {
+    return {
       hasInitialMeasurements: this.hasInitialMeasurements,
       highlightDecorations: this.decorationsToRender.highlights.slice(),
       width: this.getScrollWidth(),
       height: this.getScrollHeight(),
       lineHeight: this.getLineHeight(),
-    });
-  }
-
-  renderLineTiles() {
-    const style = {
-      position: "absolute",
-      contain: "strict",
-      overflow: "hidden",
     };
-
-    const children = [];
-    children.push(this.renderHighlightDecorations());
-
-    if (this.hasInitialMeasurements) {
-      const { lineComponentsByScreenLineId } = this;
-
-      const startRow = this.getRenderedStartRow();
-      const endRow = this.getRenderedEndRow();
-      const rowsPerTile = this.getRowsPerTile();
-      const tileWidth = this.getScrollWidth();
-
-      for (let i = 0; i < this.renderedTileStartRows.length; i++) {
-        const tileStartRow = this.renderedTileStartRows[i];
-        const tileEndRow = Math.min(endRow, tileStartRow + rowsPerTile);
-        const tileHeight =
-          this.pixelPositionBeforeBlocksForRow(tileEndRow) -
-          this.pixelPositionBeforeBlocksForRow(tileStartRow);
-
-        children.push(
-          $(LinesTileComponent, {
-            key: this.idsByTileStartRow.get(tileStartRow),
-            measuredContent: this.measuredContent,
-            height: tileHeight,
-            width: tileWidth,
-            top: this.pixelPositionBeforeBlocksForRow(tileStartRow),
-            lineHeight: this.getLineHeight(),
-            renderedStartRow: startRow,
-            tileStartRow,
-            tileEndRow,
-            screenLines: this.renderedScreenLines.slice(
-              tileStartRow - startRow,
-              tileEndRow - startRow,
-            ),
-            lineDecorations: this.decorationsToRender.lines.slice(
-              tileStartRow - startRow,
-              tileEndRow - startRow,
-            ),
-            textDecorations: this.decorationsToRender.text.slice(
-              tileStartRow - startRow,
-              tileEndRow - startRow,
-            ),
-            blockDecorations: this.decorationsToRender.blocks.get(tileStartRow),
-            displayLayer: this.props.model.displayLayer,
-            nodePool: this.lineNodesPool,
-            lineComponentsByScreenLineId,
-            horizontalPixelPositionsByScreenLineId: this.horizontalPixelPositionsByScreenLineId,
-          }),
-        );
-      }
-
-      this.extraRenderedScreenLines.forEach((screenLine, screenRow) => {
-        if (screenRow < startRow || screenRow >= endRow) {
-          children.push(
-            $(LineComponent, {
-              key: "extra-" + screenLine.id,
-              offScreen: true,
-              screenLine,
-              screenRow,
-              displayLayer: this.props.model.displayLayer,
-              nodePool: this.lineNodesPool,
-              lineComponentsByScreenLineId,
-              horizontalPixelPositionsByScreenLineId: this.horizontalPixelPositionsByScreenLineId,
-            }),
-          );
-        }
-      });
-
-      style.width = this.getScrollWidth() + "px";
-      style.height = this.getScrollHeight() + "px";
-    }
-
-    children.push(this.renderPlaceholderText());
-    children.push(this.renderCursorsAndInput());
-
-    return $.div({ key: "lineTiles", ref: "lineTiles", className: "lines", style }, children);
   }
 
-  renderCursorsAndInput() {
-    return $(CursorsAndInputComponent, {
-      ref: "cursorsAndInput",
-      key: "cursorsAndInput",
+  buildCursorsAndInputProps() {
+    return {
       didBlurHiddenInput: this.didBlurHiddenInput,
       didFocusHiddenInput: this.didFocusHiddenInput,
       didCopy: this.didCopy,
@@ -804,52 +881,164 @@ module.exports = class TextEditorComponent {
       cursorsBlinkedOff: this.cursorsBlinkedOff,
       hiddenInputPosition: this.hiddenInputPosition,
       tabIndex: this.tabIndex,
-    });
+    };
   }
 
-  renderPlaceholderText() {
-    const { model } = this.props;
-    if (model.isEmpty()) {
-      const placeholderText = model.getPlaceholderText();
-      if (placeholderText != null) {
-        return $.div({ className: "placeholder-text" }, placeholderText);
+  // Reconciles the children of the .lines container: the highlights layer,
+  // one LinesTileComponent per rendered tile (keyed by tile id), off-screen
+  // measurement lines (keyed by screen line id), the placeholder text, and
+  // the cursors layer, in that DOM order.
+  syncLineTiles() {
+    const lineTilesElement = this.refs.lineTiles;
+    const orderedElements = [this.highlightsComponent.element];
+    const seenTileIds = new Set();
+    const seenExtraLineKeys = new Set();
+
+    if (this.hasInitialMeasurements) {
+      const { lineComponentsByScreenLineId } = this;
+
+      const startRow = this.getRenderedStartRow();
+      const endRow = this.getRenderedEndRow();
+      const rowsPerTile = this.getRowsPerTile();
+      const tileWidth = this.getScrollWidth();
+
+      for (let i = 0; i < this.renderedTileStartRows.length; i++) {
+        const tileStartRow = this.renderedTileStartRows[i];
+        const tileEndRow = Math.min(endRow, tileStartRow + rowsPerTile);
+        const tileHeight =
+          this.pixelPositionBeforeBlocksForRow(tileEndRow) -
+          this.pixelPositionBeforeBlocksForRow(tileStartRow);
+        const tileId = this.idsByTileStartRow.get(tileStartRow);
+        seenTileIds.add(tileId);
+
+        const tileProps = {
+          measuredContent: this.measuredContent,
+          height: tileHeight,
+          width: tileWidth,
+          top: this.pixelPositionBeforeBlocksForRow(tileStartRow),
+          lineHeight: this.getLineHeight(),
+          renderedStartRow: startRow,
+          tileStartRow,
+          tileEndRow,
+          screenLines: this.renderedScreenLines.slice(
+            tileStartRow - startRow,
+            tileEndRow - startRow,
+          ),
+          lineDecorations: this.decorationsToRender.lines.slice(
+            tileStartRow - startRow,
+            tileEndRow - startRow,
+          ),
+          textDecorations: this.decorationsToRender.text.slice(
+            tileStartRow - startRow,
+            tileEndRow - startRow,
+          ),
+          blockDecorations: this.decorationsToRender.blocks.get(tileStartRow),
+          displayLayer: this.props.model.displayLayer,
+          nodePool: this.lineNodesPool,
+          lineComponentsByScreenLineId,
+          horizontalPixelPositionsByScreenLineId: this.horizontalPixelPositionsByScreenLineId,
+        };
+
+        let tileComponent = this.lineTileComponentsById.get(tileId);
+        if (tileComponent) {
+          tileComponent.update(tileProps);
+        } else {
+          tileComponent = new LinesTileComponent(tileProps);
+          this.lineTileComponentsById.set(tileId, tileComponent);
+        }
+        orderedElements.push(tileComponent.element);
       }
+
+      this.extraRenderedScreenLines.forEach((screenLine, screenRow) => {
+        if (screenRow < startRow || screenRow >= endRow) {
+          const key = "extra-" + screenLine.id;
+          seenExtraLineKeys.add(key);
+
+          const lineProps = {
+            offScreen: true,
+            screenLine,
+            screenRow,
+            displayLayer: this.props.model.displayLayer,
+            nodePool: this.lineNodesPool,
+            lineComponentsByScreenLineId,
+            horizontalPixelPositionsByScreenLineId: this.horizontalPixelPositionsByScreenLineId,
+          };
+
+          let lineComponent = this.extraLineComponentsByKey.get(key);
+          if (lineComponent) {
+            lineComponent.update(lineProps);
+          } else {
+            lineComponent = new LineComponent(lineProps);
+            this.extraLineComponentsByKey.set(key, lineComponent);
+          }
+          orderedElements.push(lineComponent.element);
+        }
+      });
     }
-    return null;
-  }
 
-  renderCharacterMeasurementLine() {
-    return $.div(
-      {
-        key: "characterMeasurementLine",
-        ref: "characterMeasurementLine",
-        className: "line dummy",
-        style: { position: "absolute", visibility: "hidden" },
-      },
-      // We used to put each of these characters inside the same block-level
-      // element, but that resulted in different, less-accurate measurements
-      // than when they each exist in isolation.
-      $.div({}, $.span({ ref: "normalWidthCharacterSpan" }, NORMAL_WIDTH_CHARACTER)),
-      $.div({}, $.span({ ref: "doubleWidthCharacterSpan" }, DOUBLE_WIDTH_CHARACTER)),
-      $.div({}, $.span({ ref: "halfWidthCharacterSpan" }, HALF_WIDTH_CHARACTER)),
-      $.div({}, $.span({ ref: "koreanCharacterSpan" }, KOREAN_CHARACTER)),
-    );
-  }
-
-  renderBlockDecorationMeasurementArea() {
-    return $.div({
-      ref: "blockDecorationMeasurementArea",
-      key: "blockDecorationMeasurementArea",
-      style: {
-        contain: "strict",
-        position: "absolute",
-        visibility: "hidden",
-        width: this.getScrollWidth() + "px",
-      },
+    this.lineTileComponentsById.forEach((tileComponent, tileId) => {
+      if (!seenTileIds.has(tileId)) {
+        tileComponent.destroy();
+        this.lineTileComponentsById.delete(tileId);
+      }
     });
+
+    this.extraLineComponentsByKey.forEach((lineComponent, key) => {
+      if (!seenExtraLineKeys.has(key)) {
+        lineComponent.destroy();
+        this.extraLineComponentsByKey.delete(key);
+      }
+    });
+
+    const { model } = this.props;
+    let placeholderText = null;
+    if (model.isEmpty()) {
+      placeholderText = model.getPlaceholderText();
+    }
+    if (placeholderText != null) {
+      if (!this.placeholderTextElement) {
+        this.placeholderTextElement = document.createElement("div");
+        this.placeholderTextElement.className = "placeholder-text";
+      }
+      if (placeholderText !== this.lastPlaceholderText) {
+        this.placeholderTextElement.textContent = placeholderText;
+        this.lastPlaceholderText = placeholderText;
+      }
+      orderedElements.push(this.placeholderTextElement);
+    } else if (this.placeholderTextElement) {
+      this.placeholderTextElement.remove();
+      this.placeholderTextElement = null;
+      this.lastPlaceholderText = null;
+    }
+
+    orderedElements.push(this.refs.cursorsAndInput.element);
+
+    // Walk backwards so each element can be positioned before its successor
+    // with a single insertBefore when it is new or out of order.
+    let nextElement = null;
+    for (let i = orderedElements.length - 1; i >= 0; i--) {
+      const element = orderedElements[i];
+      if (element.parentNode !== lineTilesElement || element.nextSibling !== nextElement) {
+        lineTilesElement.insertBefore(element, nextElement);
+      }
+      nextElement = element;
+    }
   }
 
-  renderDummyScrollbars() {
+  updateBlockDecorationMeasurementArea() {
+    const width = this.getScrollWidth() + "px";
+    if (width !== this.lastBlockDecorationMeasurementAreaWidth) {
+      this.refs.blockDecorationMeasurementArea.style.width = width;
+      this.lastBlockDecorationMeasurementAreaWidth = width;
+    }
+  }
+
+  // Mounts, updates, or unmounts the dummy scrollbar pair and their corner.
+  // During scrollbar remeasurement the pair is destroyed and recreated (the
+  // same protocol the previous virtual-DOM diff performed via a null render),
+  // and updateSyncAfterMeasuringContent flushes scroll positions afterwards
+  // because they cannot be assigned before the elements are attached.
+  syncDummyScrollbars() {
     if (this.shouldRenderDummyScrollbars && !this.props.model.isMini()) {
       let scrollHeight, scrollTop, horizontalScrollbarHeight;
       let scrollWidth, scrollLeft, verticalScrollbarWidth, forceScrollbarVisible;
@@ -869,66 +1058,109 @@ module.exports = class TextEditorComponent {
         forceScrollbarVisible = true;
       }
 
-      return [
-        $(DummyScrollbarComponent, {
-          ref: "verticalScrollbar",
-          orientation: "vertical",
-          didScroll: this.didScrollDummyScrollbar,
-          didMouseDown: this.didMouseDownOnContent,
-          canScroll: canScrollVertically,
-          scrollHeight,
-          scrollTop,
-          horizontalScrollbarHeight,
-          forceScrollbarVisible,
-        }),
-        $(DummyScrollbarComponent, {
-          ref: "horizontalScrollbar",
-          orientation: "horizontal",
-          didScroll: this.didScrollDummyScrollbar,
-          didMouseDown: this.didMouseDownOnContent,
-          canScroll: canScrollHorizontally,
-          scrollWidth,
-          scrollLeft,
-          verticalScrollbarWidth,
-          forceScrollbarVisible,
-        }),
+      const verticalScrollbarProps = {
+        orientation: "vertical",
+        didScroll: this.didScrollDummyScrollbar,
+        didMouseDown: this.didMouseDownOnContent,
+        canScroll: canScrollVertically,
+        scrollHeight,
+        scrollTop,
+        horizontalScrollbarHeight,
+        forceScrollbarVisible,
+      };
+      const horizontalScrollbarProps = {
+        orientation: "horizontal",
+        didScroll: this.didScrollDummyScrollbar,
+        didMouseDown: this.didMouseDownOnContent,
+        canScroll: canScrollHorizontally,
+        scrollWidth,
+        scrollLeft,
+        verticalScrollbarWidth,
+        forceScrollbarVisible,
+      };
+
+      if (this.refs.verticalScrollbar) {
+        this.refs.verticalScrollbar.update(verticalScrollbarProps);
+        this.refs.horizontalScrollbar.update(horizontalScrollbarProps);
+      } else {
+        const verticalScrollbar = new DummyScrollbarComponent(verticalScrollbarProps);
+        const horizontalScrollbar = new DummyScrollbarComponent(horizontalScrollbarProps);
 
         // Force a "corner" to render where the two scrollbars meet at the lower right
-        $.div({
-          ref: "scrollbarCorner",
-          className: "scrollbar-corner",
-          style: {
-            position: "absolute",
-            height: "20px",
-            width: "20px",
-            bottom: 0,
-            right: 0,
-            overflow: "scroll",
-          },
-        }),
-      ];
-    } else {
-      return null;
+        const scrollbarCorner = document.createElement("div");
+        scrollbarCorner.className = "scrollbar-corner";
+        const style = scrollbarCorner.style;
+        style.position = "absolute";
+        style.height = "20px";
+        style.width = "20px";
+        style.bottom = 0;
+        style.right = 0;
+        style.overflow = "scroll";
+
+        this.refs.verticalScrollbar = verticalScrollbar;
+        this.refs.horizontalScrollbar = horizontalScrollbar;
+        this.refs.scrollbarCorner = scrollbarCorner;
+        this.refs.scrollContainer.appendChild(verticalScrollbar.element);
+        this.refs.scrollContainer.appendChild(horizontalScrollbar.element);
+        this.refs.scrollContainer.appendChild(scrollbarCorner);
+      }
+    } else if (this.refs.verticalScrollbar) {
+      this.refs.verticalScrollbar.destroy();
+      this.refs.horizontalScrollbar.destroy();
+      this.refs.scrollbarCorner.remove();
+      delete this.refs.verticalScrollbar;
+      delete this.refs.horizontalScrollbar;
+      delete this.refs.scrollbarCorner;
     }
   }
 
-  renderOverlayDecorations() {
-    return this.decorationsToRender.overlays.map((overlayProps) =>
-      $(
-        OverlayComponent,
-        Object.assign(
-          {
-            key: overlayProps.element,
-            overlayComponents: this.overlayComponents,
-            didResize: (overlayComponent) => {
-              this.updateOverlayToRender(overlayProps);
-              overlayComponent.update(overlayProps);
-            },
+  // Reconciles overlay decoration components, keyed by their content element,
+  // as children of the root element following the client container.
+  syncOverlayDecorations() {
+    const seenOverlayElements = new Set();
+    const orderedElements = [];
+
+    for (let i = 0; i < this.decorationsToRender.overlays.length; i++) {
+      const overlayProps = this.decorationsToRender.overlays[i];
+      seenOverlayElements.add(overlayProps.element);
+
+      const componentProps = Object.assign(
+        {
+          overlayComponents: this.overlayComponents,
+          didResize: (overlayComponent) => {
+            this.updateOverlayToRender(overlayProps);
+            overlayComponent.update(overlayProps);
           },
-          overlayProps,
-        ),
-      ),
-    );
+        },
+        overlayProps,
+      );
+
+      let overlayComponent = this.overlayComponentsByElement.get(overlayProps.element);
+      if (overlayComponent) {
+        overlayComponent.update(componentProps);
+      } else {
+        overlayComponent = new OverlayComponent(componentProps);
+        this.overlayComponentsByElement.set(overlayProps.element, overlayComponent);
+      }
+      orderedElements.push(overlayComponent.element);
+    }
+
+    this.overlayComponentsByElement.forEach((overlayComponent, element) => {
+      if (!seenOverlayElements.has(element)) {
+        overlayComponent.destroy();
+        overlayComponent.element.remove();
+        this.overlayComponentsByElement.delete(element);
+      }
+    });
+
+    let nextElement = null;
+    for (let i = orderedElements.length - 1; i >= 0; i--) {
+      const element = orderedElements[i];
+      if (element.parentNode !== this.element || element.nextSibling !== nextElement) {
+        this.element.insertBefore(element, nextElement);
+      }
+      nextElement = element;
+    }
   }
 
   // Imperatively manipulate the class list of the root element to avoid
@@ -4130,8 +4362,13 @@ class GutterContainerComponent {
   // line-number gutters unmount entirely; hidden custom gutters stay mounted
   // with display: none.
   updateGutters() {
-    const { hasInitialMeasurements, scrollTop, scrollHeight, guttersToRender, decorationsToRender } =
-      this.props;
+    const {
+      hasInitialMeasurements,
+      scrollTop,
+      scrollHeight,
+      guttersToRender,
+      decorationsToRender,
+    } = this.props;
 
     if (hasInitialMeasurements) {
       const transform = `translateY(${-roundToPhysicalPixelBoundary(scrollTop)}px)`;
