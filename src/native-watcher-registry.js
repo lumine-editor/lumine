@@ -236,6 +236,14 @@ class RegistryWatcherNode {
   // * `childPathSegments` the {Array} of path segments between this node's directory and the watched
   //   child directory.
   addChildPath(childPathSegments) {
+    // An exact-path duplicate watcher (empty `childPathSegments`) shares this
+    // node's native watcher without occupying a distinct child directory, so it
+    // is not a child path. `path.join()` of zero segments is ".", which would
+    // later be split back out into a phantom self-watcher on this same
+    // directory when the node is removed — a native watcher nobody owns or
+    // disposes (it leaks and prints as a stray `.` child). Record only real
+    // sub-directories.
+    if (childPathSegments.length === 0) return;
     this.childPaths.add(path.join(...childPathSegments));
   }
 
@@ -245,6 +253,9 @@ class RegistryWatcherNode {
   // * `childPathSegments` the {Array} of path segments between this node's directory and the no longer
   //   watched child directory.
   removeChildPath(childPathSegments) {
+    // Symmetric with `addChildPath`: an exact-path share is not a child path,
+    // so there is nothing to forget.
+    if (childPathSegments.length === 0) return;
     this.childPaths.delete(path.join(...childPathSegments));
   }
 

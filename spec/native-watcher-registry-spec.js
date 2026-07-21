@@ -237,6 +237,48 @@ describe("NativeWatcherRegistry", function () {
       expect(stoppedNode).toBe(true);
     });
 
+    it("removes cleanly when two watchers share the exact same directory", async function () {
+      // Two watchers on the identical path share a single native watcher. When
+      // it stops, the node must disappear entirely: an exact-path duplicate is
+      // not a child directory, so it must never spawn a phantom self-watcher
+      // (which would leak and print as a stray `.` child of the directory).
+      const sharedPath = absolute("shared", "directory");
+
+      const created = [];
+      createNative = (dir) => {
+        if (dir !== sharedPath) {
+          throw new Error(`Unexpected directory ${dir}`);
+        }
+        const native = new MockNative(`shared-${created.length}`);
+        created.push(native);
+        return native;
+      };
+
+      const watcherA = new MockWatcher(sharedPath);
+      await registry.attach(watcherA);
+
+      const watcherB = new MockWatcher(sharedPath);
+      await registry.attach(watcherB);
+
+      // The exact-path duplicate reuses the first native watcher.
+      expect(created.length).toBe(1);
+      expect(watcherA.native).toBe(created[0]);
+      expect(watcherB.native).toBe(created[0]);
+
+      created[0].stop();
+
+      // No phantom watcher was created and the tree is empty.
+      expect(created.length).toBe(1);
+      expect(registry.print()).toBe("");
+      expect(
+        registry.tree.root.lookup(parts(sharedPath)).when({
+          parent: () => false,
+          missing: () => true,
+          children: () => false,
+        }),
+      ).toBe(true);
+    });
+
     it("reassigns new child watchers when a parent watcher is stopped", async function () {
       const CHILD0 = new MockNative("child0");
       const CHILD1 = new MockNative("child1");
