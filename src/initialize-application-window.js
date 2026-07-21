@@ -19,6 +19,10 @@ global.atom = new AtomEnvironment({
 });
 
 TextEditor.setScheduler(global.atom.views);
+// The editor component has its own scheduler hook; etch consumers (the dock
+// and bundled packages) need the view registry installed separately so their
+// updates stay coordinated with the editor's read/write batching.
+require("@lumine-code/etch").setScheduler(global.atom.views);
 global.atom.preloadPackages();
 
 // Like sands through the hourglass, so are the days of our lives.

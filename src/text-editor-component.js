@@ -29,13 +29,24 @@ function scaleMouseDragAutoscrollDelta(delta) {
   return Math.pow(delta / 3, 3) / 280;
 }
 
+// The document scheduler used to batch DOM reads and writes across editor
+// updates. In a Lumine window this is the view registry (`atom.views`),
+// installed at window initialization; the fallback DefaultScheduler only
+// serves standalone component usage outside a full editor environment.
+let scheduler = null;
+
+function getScheduler() {
+  if (!scheduler) scheduler = new DefaultScheduler();
+  return scheduler;
+}
+
 module.exports = class TextEditorComponent {
-  static setScheduler(scheduler) {
-    etch.setScheduler(scheduler);
+  static setScheduler(newScheduler) {
+    scheduler = newScheduler;
   }
 
   static getScheduler() {
-    return etch.getScheduler();
+    return getScheduler();
   }
 
   static didUpdateStyles() {
@@ -254,7 +265,7 @@ module.exports = class TextEditorComponent {
       this.updateSync();
     } else if (!this.updateScheduled) {
       this.updateScheduled = true;
-      etch.getScheduler().updateDocument(() => {
+      getScheduler().updateDocument(() => {
         if (this.updateScheduled) this.updateSync(true);
       });
     }
@@ -322,10 +333,10 @@ module.exports = class TextEditorComponent {
 
     this.updateSyncBeforeMeasuringContent();
     if (useScheduler === true) {
-      const scheduler = etch.getScheduler();
-      scheduler.readDocument(() => {
+      const documentScheduler = getScheduler();
+      documentScheduler.readDocument(() => {
         const restartFrame = this.measureContentDuringUpdateSync();
-        scheduler.updateDocument(() => {
+        documentScheduler.updateDocument(() => {
           if (restartFrame) {
             this.updateSync(true);
           } else {
@@ -3965,28 +3976,56 @@ module.exports = class TextEditorComponent {
 class DummyScrollbarComponent {
   constructor(props) {
     this.props = props;
-    etch.initialize(this);
+    this.didMouseDown = this.didMouseDown.bind(this);
+
+    const { orientation } = props;
+    this.element = document.createElement("div");
+    this.element.className = `${orientation}-scrollbar`;
+    this.innerElement = document.createElement("div");
+    this.element.appendChild(this.innerElement);
+    this.element.addEventListener("scroll", (event) => this.props.didScroll(event));
+    this.element.addEventListener("mousedown", this.didMouseDown);
+
+    const outerStyle = this.element.style;
+    const innerStyle = this.innerElement.style;
+    outerStyle.position = "absolute";
+    outerStyle.contain = "content";
+    outerStyle.zIndex = 1;
+    outerStyle.willChange = "transform";
+    outerStyle.cursor = "default";
+    if (orientation === "horizontal") {
+      outerStyle.bottom = 0;
+      outerStyle.left = 0;
+      outerStyle.height = "15px";
+      outerStyle.overflowY = "hidden";
+      innerStyle.height = "15px";
+    } else {
+      outerStyle.right = 0;
+      outerStyle.top = 0;
+      outerStyle.width = "15px";
+      outerStyle.overflowX = "hidden";
+      innerStyle.width = "15px";
+    }
+    this.updateStyles({});
   }
 
   update(newProps) {
     const oldProps = this.props;
     this.props = newProps;
-    etch.updateSync(this);
+    this.updateStyles(oldProps);
 
     const shouldFlushScrollPosition =
       newProps.scrollTop !== oldProps.scrollTop || newProps.scrollLeft !== oldProps.scrollLeft;
     if (shouldFlushScrollPosition) this.flushScrollPosition();
   }
 
-  flushScrollPosition() {
-    if (this.props.orientation === "horizontal") {
-      this.element.scrollLeft = this.props.scrollLeft;
-    } else {
-      this.element.scrollTop = this.props.scrollTop;
-    }
+  destroy() {
+    this.element.remove();
   }
 
-  render() {
+  // Writes only the styles whose inputs changed since the given previous
+  // props, so per-frame updates with unchanged geometry don't touch the DOM.
+  updateStyles(oldProps) {
     const {
       orientation,
       scrollWidth,
@@ -3995,53 +4034,41 @@ class DummyScrollbarComponent {
       horizontalScrollbarHeight,
       canScroll,
       forceScrollbarVisible,
-      didScroll,
     } = this.props;
 
-    const outerStyle = {
-      position: "absolute",
-      contain: "content",
-      zIndex: 1,
-      willChange: "transform",
-    };
-    if (!canScroll) outerStyle.visibility = "hidden";
-
-    const innerStyle = {};
-    if (orientation === "horizontal") {
-      let right = verticalScrollbarWidth || 0;
-      outerStyle.bottom = 0;
-      outerStyle.left = 0;
-      outerStyle.right = right + "px";
-      outerStyle.height = "15px";
-      outerStyle.overflowY = "hidden";
-      outerStyle.overflowX = forceScrollbarVisible ? "scroll" : "auto";
-      outerStyle.cursor = "default";
-      innerStyle.height = "15px";
-      innerStyle.width = (scrollWidth || 0) + "px";
-    } else {
-      let bottom = horizontalScrollbarHeight || 0;
-      outerStyle.right = 0;
-      outerStyle.top = 0;
-      outerStyle.bottom = bottom + "px";
-      outerStyle.width = "15px";
-      outerStyle.overflowX = "hidden";
-      outerStyle.overflowY = forceScrollbarVisible ? "scroll" : "auto";
-      outerStyle.cursor = "default";
-      innerStyle.width = "15px";
-      innerStyle.height = (scrollHeight || 0) + "px";
+    if (canScroll !== oldProps.canScroll) {
+      this.element.style.visibility = canScroll ? "" : "hidden";
     }
 
-    return $.div(
-      {
-        className: `${orientation}-scrollbar`,
-        style: outerStyle,
-        on: {
-          scroll: didScroll,
-          mousedown: this.didMouseDown,
-        },
-      },
-      $.div({ style: innerStyle }),
-    );
+    if (orientation === "horizontal") {
+      if (verticalScrollbarWidth !== oldProps.verticalScrollbarWidth) {
+        this.element.style.right = (verticalScrollbarWidth || 0) + "px";
+      }
+      if (forceScrollbarVisible !== oldProps.forceScrollbarVisible) {
+        this.element.style.overflowX = forceScrollbarVisible ? "scroll" : "auto";
+      }
+      if (scrollWidth !== oldProps.scrollWidth) {
+        this.innerElement.style.width = (scrollWidth || 0) + "px";
+      }
+    } else {
+      if (horizontalScrollbarHeight !== oldProps.horizontalScrollbarHeight) {
+        this.element.style.bottom = (horizontalScrollbarHeight || 0) + "px";
+      }
+      if (forceScrollbarVisible !== oldProps.forceScrollbarVisible) {
+        this.element.style.overflowY = forceScrollbarVisible ? "scroll" : "auto";
+      }
+      if (scrollHeight !== oldProps.scrollHeight) {
+        this.innerElement.style.height = (scrollHeight || 0) + "px";
+      }
+    }
+  }
+
+  flushScrollPosition() {
+    if (this.props.orientation === "horizontal") {
+      this.element.scrollLeft = this.props.scrollLeft;
+    } else {
+      this.element.scrollTop = this.props.scrollTop;
+    }
   }
 
   didMouseDown(event) {
@@ -4199,31 +4226,151 @@ class GutterContainerComponent {
 }
 
 class LineNumberGutterComponent {
+  // Adopts the gutter model's element (`props.element`) and renders a hidden
+  // measurement placeholder followed by one absolutely-positioned tile per
+  // rendered tile, each holding pooled LineNumberComponents keyed by row key.
   constructor(props) {
     this.props = props;
     this.element = this.props.element;
-    this.virtualNode = $.div(null);
-    this.virtualNode.domNode = this.element;
     this.nodePool = new NodePool();
-    etch.updateSync(this);
+    this.didMouseDown = this.didMouseDown.bind(this);
+    this.didMouseMove = this.didMouseMove.bind(this);
+    this.tilesById = new Map();
+    this.lastClassName = null;
+    this.lastHeight = null;
+    this.lastPlaceholderText = undefined;
+    this.placeholderTextNode = null;
+
+    this.element.setAttribute("gutter-name", props.name);
+    this.element.style.position = "relative";
+    this.element.addEventListener("mousedown", this.didMouseDown);
+    this.element.addEventListener("mousemove", this.didMouseMove);
+
+    this.placeholderElement = document.createElement("div");
+    this.placeholderElement.className = "line-number dummy";
+    this.placeholderElement.style.visibility = "hidden";
+    this.placeholderIconElement = document.createElement("div");
+    this.placeholderIconElement.className = "icon-right";
+    this.placeholderElement.appendChild(this.placeholderIconElement);
+    this.element.appendChild(this.placeholderElement);
+
+    this.updateGutter();
   }
 
   update(newProps) {
     if (this.shouldUpdate(newProps)) {
       this.props = newProps;
-      etch.updateSync(this);
+      this.updateGutter();
     }
   }
 
-  render() {
+  updateGutter() {
+    const { height, className, maxDigits, showLineNumbers } = this.props;
+
+    let rootClassName = "gutter line-numbers";
+    if (className) {
+      rootClassName += " " + className;
+    }
+    if (rootClassName !== this.lastClassName) {
+      this.element.className = rootClassName;
+      this.lastClassName = rootClassName;
+    }
+
+    const heightPx = ceilToPhysicalPixelBoundary(height) + "px";
+    if (heightPx !== this.lastHeight) {
+      this.element.style.height = heightPx;
+      this.lastHeight = heightPx;
+    }
+
+    const placeholderText = showLineNumbers ? "0".repeat(maxDigits) : null;
+    if (placeholderText !== this.lastPlaceholderText) {
+      if (this.placeholderTextNode) {
+        this.placeholderTextNode.remove();
+        this.placeholderTextNode = null;
+      }
+      if (placeholderText != null) {
+        this.placeholderTextNode = document.createTextNode(placeholderText);
+        this.placeholderElement.insertBefore(this.placeholderTextNode, this.placeholderIconElement);
+      }
+      this.lastPlaceholderText = placeholderText;
+    }
+
+    this.updateTiles();
+  }
+
+  updateTiles() {
+    const { rootComponent, bufferRows, endRow, rowsPerTile, width } = this.props;
+
+    const seenTileIds = new Set();
+    let previousElement = this.placeholderElement;
+
+    if (bufferRows) {
+      for (let i = 0; i < rootComponent.renderedTileStartRows.length; i++) {
+        const tileStartRow = rootComponent.renderedTileStartRows[i];
+        const tileEndRow = Math.min(endRow, tileStartRow + rowsPerTile);
+        const tileId = rootComponent.idsByTileStartRow.get(tileStartRow);
+        seenTileIds.add(tileId);
+
+        let tile = this.tilesById.get(tileId);
+        if (!tile) {
+          const tileElement = document.createElement("div");
+          const style = tileElement.style;
+          style.contain = "layout style";
+          style.position = "absolute";
+          style.top = 0;
+          tile = {
+            element: tileElement,
+            lineNumbersByKey: new Map(),
+            height: null,
+            width: null,
+            top: null,
+          };
+          this.tilesById.set(tileId, tile);
+        }
+
+        const tileTop = rootComponent.pixelPositionBeforeBlocksForRow(tileStartRow);
+        const tileBottom = rootComponent.pixelPositionBeforeBlocksForRow(tileEndRow);
+        const tileHeight = tileBottom - tileTop;
+        const tileWidth = width != null && width > 0 ? width + "px" : "";
+        if (tile.height !== tileHeight) {
+          tile.element.style.height = tileHeight + "px";
+          tile.height = tileHeight;
+        }
+        if (tile.width !== tileWidth) {
+          tile.element.style.width = tileWidth;
+          tile.width = tileWidth;
+        }
+        if (tile.top !== tileTop) {
+          tile.element.style.transform = `translateY(${tileTop}px)`;
+          tile.top = tileTop;
+        }
+
+        this.updateTileLineNumbers(tile, tileStartRow, tileEndRow);
+
+        if (tile.element.previousSibling !== previousElement) {
+          this.element.insertBefore(tile.element, previousElement.nextSibling);
+        }
+        previousElement = tile.element;
+      }
+    }
+
+    this.tilesById.forEach((tile, tileId) => {
+      if (!seenTileIds.has(tileId)) {
+        tile.lineNumbersByKey.forEach((lineNumberComponent) => {
+          lineNumberComponent.destroy();
+        });
+        tile.element.remove();
+        this.tilesById.delete(tileId);
+      }
+    });
+  }
+
+  updateTileLineNumbers(tile, tileStartRow, tileEndRow) {
     const {
       rootComponent,
       showLineNumbers,
-      height,
       width,
       startRow,
-      endRow,
-      rowsPerTile,
       maxDigits,
       keys,
       bufferRows,
@@ -4231,121 +4378,89 @@ class LineNumberGutterComponent {
       softWrappedFlags,
       foldableFlags,
       decorations,
-      className,
     } = this.props;
 
-    let children = null;
+    const rowCount = tileEndRow - tileStartRow;
+    const rowPropsByIndex = new Array(rowCount);
+    const newKeys = new Set();
+    for (let row = tileStartRow; row < tileEndRow; row++) {
+      const indexInTile = row - tileStartRow;
+      const j = row - startRow;
+      const key = keys[j];
+      const softWrapped = softWrappedFlags[j];
+      const foldable = foldableFlags[j];
+      const bufferRow = bufferRows[j];
+      const screenRow = screenRows[j];
 
-    if (bufferRows) {
-      children = new Array(rootComponent.renderedTileStartRows.length);
-      for (let i = 0; i < rootComponent.renderedTileStartRows.length; i++) {
-        const tileStartRow = rootComponent.renderedTileStartRows[i];
-        const tileEndRow = Math.min(endRow, tileStartRow + rowsPerTile);
-        const tileChildren = new Array(tileEndRow - tileStartRow);
-        for (let row = tileStartRow; row < tileEndRow; row++) {
-          const indexInTile = row - tileStartRow;
-          const j = row - startRow;
-          const key = keys[j];
-          const softWrapped = softWrappedFlags[j];
-          const foldable = foldableFlags[j];
-          const bufferRow = bufferRows[j];
-          const screenRow = screenRows[j];
+      let className = "line-number";
+      if (foldable) className = className + " foldable";
 
-          let className = "line-number";
-          if (foldable) className = className + " foldable";
+      const decorationsForRow = decorations[row - startRow];
+      if (decorationsForRow) className = className + " " + decorationsForRow;
 
-          const decorationsForRow = decorations[row - startRow];
-          if (decorationsForRow) className = className + " " + decorationsForRow;
-
-          let number = null;
-          if (showLineNumbers) {
-            if (this.props.labelFn == null) {
-              number = softWrapped ? "•" : bufferRow + 1;
-              number = NBSP_CHARACTER.repeat(maxDigits - number.length) + number;
-            } else {
-              number = this.props.labelFn({
-                bufferRow,
-                screenRow,
-                foldable,
-                softWrapped,
-                maxDigits,
-              });
-            }
-          }
-
-          // We need to adjust the line number position to account for block
-          // decorations preceding the current row and following the preceding
-          // row. Note that we ignore the latter when the line number starts at
-          // the beginning of the tile, because the tile will already be
-          // positioned to take into account block decorations added after the
-          // last row of the previous tile.
-          let marginTop = rootComponent.heightForBlockDecorationsBeforeRow(row);
-          if (indexInTile > 0)
-            marginTop += rootComponent.heightForBlockDecorationsAfterRow(row - 1);
-
-          tileChildren[row - tileStartRow] = $(LineNumberComponent, {
-            key,
-            className,
-            width,
+      let number = null;
+      if (showLineNumbers) {
+        if (this.props.labelFn == null) {
+          number = softWrapped ? "•" : bufferRow + 1;
+          number = NBSP_CHARACTER.repeat(maxDigits - number.length) + number;
+        } else {
+          number = this.props.labelFn({
             bufferRow,
             screenRow,
-            number,
-            marginTop,
-            nodePool: this.nodePool,
+            foldable,
+            softWrapped,
+            maxDigits,
           });
         }
-
-        const tileTop = rootComponent.pixelPositionBeforeBlocksForRow(tileStartRow);
-        const tileBottom = rootComponent.pixelPositionBeforeBlocksForRow(tileEndRow);
-        const tileHeight = tileBottom - tileTop;
-        const tileWidth = width != null && width > 0 ? width + "px" : "";
-
-        children[i] = $.div(
-          {
-            key: rootComponent.idsByTileStartRow.get(tileStartRow),
-            style: {
-              contain: "layout style",
-              position: "absolute",
-              top: 0,
-              height: tileHeight + "px",
-              width: tileWidth,
-              transform: `translateY(${tileTop}px)`,
-            },
-          },
-          ...tileChildren,
-        );
       }
+
+      // We need to adjust the line number position to account for block
+      // decorations preceding the current row and following the preceding
+      // row. Note that we ignore the latter when the line number starts at
+      // the beginning of the tile, because the tile will already be
+      // positioned to take into account block decorations added after the
+      // last row of the previous tile.
+      let marginTop = rootComponent.heightForBlockDecorationsBeforeRow(row);
+      if (indexInTile > 0) marginTop += rootComponent.heightForBlockDecorationsAfterRow(row - 1);
+
+      rowPropsByIndex[indexInTile] = {
+        key,
+        className,
+        width,
+        bufferRow,
+        screenRow,
+        number,
+        marginTop,
+        nodePool: this.nodePool,
+      };
+      newKeys.add(key);
     }
 
-    let rootClassName = "gutter line-numbers";
-    if (className) {
-      rootClassName += " " + className;
-    }
+    tile.lineNumbersByKey.forEach((lineNumberComponent, key) => {
+      if (!newKeys.has(key)) {
+        lineNumberComponent.destroy();
+        tile.lineNumbersByKey.delete(key);
+      }
+    });
 
-    return $.div(
-      {
-        className: rootClassName,
-        attributes: { "gutter-name": this.props.name },
-        style: {
-          position: "relative",
-          height: ceilToPhysicalPixelBoundary(height) + "px",
-        },
-        on: {
-          mousedown: this.didMouseDown,
-          mousemove: this.didMouseMove,
-        },
-      },
-      $.div(
-        {
-          key: "placeholder",
-          className: "line-number dummy",
-          style: { visibility: "hidden" },
-        },
-        showLineNumbers ? "0".repeat(maxDigits) : null,
-        $.div({ className: "icon-right" }),
-      ),
-      children,
-    );
+    // Walk backwards so each element can be positioned before its successor
+    // with a single insertBefore when it is new or out of order.
+    let nextElement = null;
+    for (let i = rowCount - 1; i >= 0; i--) {
+      const rowProps = rowPropsByIndex[i];
+      let lineNumberComponent = tile.lineNumbersByKey.get(rowProps.key);
+      if (lineNumberComponent) {
+        lineNumberComponent.update(rowProps);
+      } else {
+        lineNumberComponent = new LineNumberComponent(rowProps);
+        tile.lineNumbersByKey.set(rowProps.key, lineNumberComponent);
+      }
+      const element = lineNumberComponent.element;
+      if (element.parentNode !== tile.element || element.nextSibling !== nextElement) {
+        tile.element.insertBefore(element, nextElement);
+      }
+      nextElement = element;
+    }
   }
 
   shouldUpdate(newProps) {
@@ -4489,57 +4604,78 @@ class LineNumberComponent {
 }
 
 class CustomGutterComponent {
+  // Adopts the gutter model's element (`props.element`); the element outlives
+  // this component, so destroy only detaches it from the container.
   constructor(props) {
     this.props = props;
     this.element = this.props.element;
-    this.virtualNode = $.div(null);
-    this.virtualNode.domNode = this.element;
-    etch.updateSync(this);
+    this.decorationComponents = [];
+    this.lastClassName = null;
+    this.lastVisible = null;
+    this.lastHeight = null;
+
+    this.element.setAttribute("gutter-name", props.name);
+    this.decorationsElement = document.createElement("div");
+    this.decorationsElement.className = "custom-decorations";
+    this.element.appendChild(this.decorationsElement);
+
+    this.updateGutter();
   }
 
   update(props) {
     this.props = props;
-    etch.updateSync(this);
+    this.updateGutter();
   }
 
   destroy() {
-    etch.destroy(this);
+    this.element.remove();
   }
 
-  render() {
+  updateGutter() {
     let className = "gutter";
     if (this.props.className) {
       className += " " + this.props.className;
     }
-    return $.div(
-      {
-        className,
-        attributes: { "gutter-name": this.props.name },
-        style: {
-          display: this.props.visible ? "" : "none",
-        },
-      },
-      $.div(
-        {
-          className: "custom-decorations",
-          style: { height: this.props.height + "px" },
-        },
-        this.renderDecorations(),
-      ),
-    );
+    if (className !== this.lastClassName) {
+      this.element.className = className;
+      this.lastClassName = className;
+    }
+
+    const visible = this.props.visible;
+    if (visible !== this.lastVisible) {
+      this.element.style.display = visible ? "" : "none";
+      this.lastVisible = visible;
+    }
+
+    const height = this.props.height;
+    if (height !== this.lastHeight) {
+      this.decorationsElement.style.height = height + "px";
+      this.lastHeight = height;
+    }
+
+    this.updateDecorations();
   }
 
-  renderDecorations() {
-    if (!this.props.decorations) return null;
+  // Syncs decoration components positionally, matching the unkeyed child
+  // reconciliation the previous virtual-DOM diff performed.
+  updateDecorations() {
+    const decorations = this.props.decorations || [];
 
-    return this.props.decorations.map(({ className, element, top, height }) => {
-      return $(CustomGutterDecorationComponent, {
-        className,
-        element,
-        top,
-        height,
-      });
-    });
+    while (this.decorationComponents.length > decorations.length) {
+      this.decorationComponents.pop().element.remove();
+    }
+
+    for (let i = 0; i < decorations.length; i++) {
+      const { className, element, top, height } = decorations[i];
+      const decorationProps = { className, element, top, height };
+      if (i < this.decorationComponents.length) {
+        this.decorationComponents[i].update(decorationProps);
+      } else {
+        const component = new CustomGutterDecorationComponent(decorationProps);
+        this.decorationsElement.appendChild(component.element);
+        this.decorationComponents.push(component);
+      }
+    }
   }
 }
 
@@ -4583,13 +4719,51 @@ class CustomGutterDecorationComponent {
 class CursorsAndInputComponent {
   constructor(props) {
     this.props = props;
-    etch.initialize(this);
+    this.refs = {};
+    this.cursorNodes = [];
+    this.cursorCaches = [];
+    this.hiddenInputCache = {};
+    this.lastClassName = this.getCursorsClassName();
+    this.lastScrollWidth = props.scrollWidth;
+    this.lastScrollHeight = props.scrollHeight;
+
+    this.element = document.createElement("div");
+    this.element.className = this.lastClassName;
+    const style = this.element.style;
+    style.position = "absolute";
+    style.contain = "strict";
+    style.zIndex = 1;
+    style.width = props.scrollWidth + "px";
+    style.height = props.scrollHeight + "px";
+    style.pointerEvents = "none";
+    style.userSelect = "none";
+    this.refs.cursors = this.element;
+
+    this.buildHiddenInput();
+    this.updateCursors();
   }
 
   update(props) {
     if (props.measuredContent) {
       this.props = props;
-      etch.updateSync(this);
+
+      const { scrollWidth, scrollHeight } = props;
+      const className = this.getCursorsClassName();
+      if (className !== this.lastClassName) {
+        this.element.className = className;
+        this.lastClassName = className;
+      }
+      if (scrollWidth !== this.lastScrollWidth) {
+        this.element.style.width = scrollWidth + "px";
+        this.lastScrollWidth = scrollWidth;
+      }
+      if (scrollHeight !== this.lastScrollHeight) {
+        this.element.style.height = scrollHeight + "px";
+        this.lastScrollHeight = scrollHeight;
+      }
+
+      this.updateHiddenInput();
+      this.updateCursors();
     }
   }
 
@@ -4597,24 +4771,31 @@ class CursorsAndInputComponent {
     this.props.cursorsBlinkedOff = cursorsBlinkedOff;
     const className = this.getCursorsClassName();
     this.refs.cursors.className = className;
-    this.virtualNode.props.className = className;
+    this.lastClassName = className;
   }
 
-  render() {
-    const { lineHeight, decorationsToRender, scrollHeight, scrollWidth } = this.props;
+  getCursorsClassName() {
+    return this.props.cursorsBlinkedOff ? "cursors blink-off" : "cursors";
+  }
 
-    const className = this.getCursorsClassName();
+  updateCursors() {
+    const { lineHeight, decorationsToRender, scrollWidth } = this.props;
+    const cursors = decorationsToRender.cursors;
     const cursorHeight = lineHeight + "px";
 
-    const children = [this.renderHiddenInput()];
-    for (let i = 0; i < decorationsToRender.cursors.length; i++) {
+    while (this.cursorNodes.length > cursors.length) {
+      this.cursorNodes.pop().remove();
+      this.cursorCaches.pop();
+    }
+
+    for (let i = 0; i < cursors.length; i++) {
       const {
         pixelLeft,
         pixelTop,
         pixelWidth,
         className: extraCursorClassName,
         style: extraCursorStyle,
-      } = decorationsToRender.cursors[i];
+      } = cursors[i];
       let cursorClassName = "cursor";
       if (extraCursorClassName) cursorClassName += " " + extraCursorClassName;
 
@@ -4625,41 +4806,40 @@ class CursorsAndInputComponent {
       };
       if (extraCursorStyle) Object.assign(cursorStyle, extraCursorStyle);
 
-      children.push(
-        $.div({
-          className: cursorClassName,
-          style: cursorStyle,
-        }),
-      );
+      let node = this.cursorNodes[i];
+      let cache = this.cursorCaches[i];
+      if (!node) {
+        node = document.createElement("div");
+        this.element.appendChild(node);
+        this.cursorNodes.push(node);
+        cache = {};
+        this.cursorCaches.push(cache);
+      }
+
+      if (cache.className !== cursorClassName) {
+        node.className = cursorClassName;
+        cache.className = cursorClassName;
+      }
+
+      const oldStyle = cache.style;
+      if (oldStyle) {
+        for (const key in oldStyle) {
+          if (!(key in cursorStyle)) node.style[key] = "";
+        }
+        for (const key in cursorStyle) {
+          if (oldStyle[key] !== cursorStyle[key]) node.style[key] = cursorStyle[key];
+        }
+      } else {
+        for (const key in cursorStyle) {
+          node.style[key] = cursorStyle[key];
+        }
+      }
+      cache.style = cursorStyle;
     }
-
-    return $.div(
-      {
-        key: "cursors",
-        ref: "cursors",
-        className,
-        style: {
-          position: "absolute",
-          contain: "strict",
-          zIndex: 1,
-          width: scrollWidth + "px",
-          height: scrollHeight + "px",
-          pointerEvents: "none",
-          userSelect: "none",
-        },
-      },
-      children,
-    );
   }
 
-  getCursorsClassName() {
-    return this.props.cursorsBlinkedOff ? "cursors blink-off" : "cursors";
-  }
-
-  renderHiddenInput() {
+  buildHiddenInput() {
     const {
-      lineHeight,
-      hiddenInputPosition,
       didBlurHiddenInput,
       didFocusHiddenInput,
       didCopy,
@@ -4672,8 +4852,37 @@ class CursorsAndInputComponent {
       didCompositionStart,
       didCompositionUpdate,
       didCompositionEnd,
-      tabIndex,
     } = this.props;
+
+    const input = document.createElement("input");
+    input.className = "hidden-input";
+    input.addEventListener("blur", didBlurHiddenInput);
+    input.addEventListener("focus", didFocusHiddenInput);
+    input.addEventListener("copy", didCopy);
+    input.addEventListener("cut", didCut);
+    input.addEventListener("paste", didPaste);
+    input.addEventListener("textInput", didTextInput);
+    input.addEventListener("keydown", didKeydown);
+    input.addEventListener("keyup", didKeyup);
+    input.addEventListener("keypress", didKeypress);
+    input.addEventListener("compositionstart", didCompositionStart);
+    input.addEventListener("compositionupdate", didCompositionUpdate);
+    input.addEventListener("compositionend", didCompositionEnd);
+
+    const style = input.style;
+    style.position = "absolute";
+    style.width = "1px";
+    style.opacity = 0;
+    style.padding = 0;
+    style.border = 0;
+
+    this.refs.hiddenInput = input;
+    this.element.appendChild(input);
+    this.updateHiddenInput();
+  }
+
+  updateHiddenInput() {
+    const { lineHeight, hiddenInputPosition, tabIndex } = this.props;
 
     let top, left;
     if (hiddenInputPosition) {
@@ -4684,43 +4893,41 @@ class CursorsAndInputComponent {
       left = 0;
     }
 
-    return $.input({
-      ref: "hiddenInput",
-      key: "hiddenInput",
-      className: "hidden-input",
-      on: {
-        blur: didBlurHiddenInput,
-        focus: didFocusHiddenInput,
-        copy: didCopy,
-        cut: didCut,
-        paste: didPaste,
-        textInput: didTextInput,
-        keydown: didKeydown,
-        keyup: didKeyup,
-        keypress: didKeypress,
-        compositionstart: didCompositionStart,
-        compositionupdate: didCompositionUpdate,
-        compositionend: didCompositionEnd,
-      },
-      tabIndex: tabIndex,
-      style: {
-        position: "absolute",
-        width: "1px",
-        height: lineHeight + "px",
-        top: top + "px",
-        left: left + "px",
-        opacity: 0,
-        padding: 0,
-        border: 0,
-      },
-    });
+    const input = this.refs.hiddenInput;
+    const cache = this.hiddenInputCache;
+    if (cache.lineHeight !== lineHeight) {
+      input.style.height = lineHeight + "px";
+      cache.lineHeight = lineHeight;
+    }
+    if (cache.top !== top) {
+      input.style.top = top + "px";
+      cache.top = top;
+    }
+    if (cache.left !== left) {
+      input.style.left = left + "px";
+      cache.left = left;
+    }
+    if (cache.tabIndex !== tabIndex) {
+      input.tabIndex = tabIndex;
+      cache.tabIndex = tabIndex;
+    }
   }
 }
 
 class LinesTileComponent {
   constructor(props) {
     this.props = props;
-    etch.initialize(this);
+
+    // Lines and block decorations are manually inserted into this container
+    // for efficiency.
+    this.element = document.createElement("div");
+    const style = this.element.style;
+    style.contain = "layout style";
+    style.position = "absolute";
+    style.height = props.height + "px";
+    style.width = props.width + "px";
+    style.transform = `translateY(${props.top}px)`;
+
     this.createLines();
     this.updateBlockDecorations({}, props);
   }
@@ -4729,7 +4936,17 @@ class LinesTileComponent {
     if (this.shouldUpdate(newProps)) {
       const oldProps = this.props;
       this.props = newProps;
-      etch.updateSync(this);
+
+      if (newProps.height !== oldProps.height) {
+        this.element.style.height = newProps.height + "px";
+      }
+      if (newProps.width !== oldProps.width) {
+        this.element.style.width = newProps.width + "px";
+      }
+      if (newProps.top !== oldProps.top) {
+        this.element.style.transform = `translateY(${newProps.top}px)`;
+      }
+
       if (!newProps.measuredContent) {
         this.updateLines(oldProps, newProps);
         this.updateBlockDecorations(oldProps, newProps);
@@ -4743,24 +4960,7 @@ class LinesTileComponent {
     }
     this.lineComponents.length = 0;
 
-    return etch.destroy(this);
-  }
-
-  render() {
-    const { height, width, top } = this.props;
-
-    return $.div(
-      {
-        style: {
-          contain: "layout style",
-          position: "absolute",
-          height: height + "px",
-          width: width + "px",
-          transform: `translateY(${top}px)`,
-        },
-      },
-      // Lines and block decorations will be manually inserted here for efficiency
-    );
+    this.element.remove();
   }
 
   createLines() {
@@ -5285,7 +5485,9 @@ class HighlightsComponent {
 class HighlightComponent {
   constructor(props) {
     this.props = props;
-    etch.initialize(this);
+    this.element = document.createElement("div");
+    this.lastClassName = null;
+    this.renderRegions();
     if (this.props.flashRequested) this.performFlash();
   }
 
@@ -5297,12 +5499,12 @@ class HighlightComponent {
       this.timeoutsByClassName.clear();
     }
 
-    return etch.destroy(this);
+    this.element.remove();
   }
 
   update(newProps) {
     this.props = newProps;
-    etch.updateSync(this);
+    this.renderRegions();
     if (newProps.flashRequested) this.performFlash();
   }
 
@@ -5329,36 +5531,43 @@ class HighlightComponent {
     }
   }
 
-  render() {
+  // Rebuilds the region children from the current props. The containing
+  // HighlightsComponent only calls in when the highlight actually changed, so
+  // recreating the handful of region nodes is cheap. The root class name is
+  // only written when its computed value changes so that in-progress flash
+  // classes added by performFlash survive unrelated updates.
+  renderRegions() {
     const { className, screenRange, lineHeight, startPixelTop, startRects, endPixelTop, endRects } =
       this.props;
     const regionClassName = "region " + className;
 
-    let children;
+    const rootClassName = "highlight " + className;
+    if (rootClassName !== this.lastClassName) {
+      this.element.className = rootClassName;
+      this.lastClassName = rootClassName;
+    }
+
+    const children = [];
     if (screenRange.start.row === screenRange.end.row) {
       // Single line select.
       //
       // On both the starting and ending lines, we might need to draw more than
       // one decoration if there’s a mix of LTR and RTL text.
-      children = startRects.map((r) => {
-        return $.div({
-          className: regionClassName,
-          style: {
-            position: "absolute",
-            boxSizing: "border-box",
-            // `startPixelTop` is the best indicator of where the decoration
-            // should start vertically; the `rect` just gets used for its
-            // `left` and `width`.
+      for (const r of startRects) {
+        // `startPixelTop` is the best indicator of where the decoration
+        // should start vertically; the `rect` just gets used for its
+        // `left` and `width`.
+        children.push(
+          buildRegion(regionClassName, {
             top: startPixelTop + "px",
             left: r.left + "px",
             width: r.width + "px",
             height: lineHeight + "px",
-          },
-        });
-      });
+          }),
+        );
+      }
     } else {
       // Multi-line select.
-      children = [];
       // Rightmost highlight extends all the way to the end of the line.
       let rightmostRect;
       for (let startRect of startRects) {
@@ -5366,41 +5575,32 @@ class HighlightComponent {
           rightmostRect = startRect;
         }
       }
-      children.push(
-        ...startRects.map((r) => {
-          let style = {
-            position: "absolute",
-            boxSizing: "border-box",
-            top: startPixelTop + "px",
-            left: r.left + "px",
-            height: lineHeight + "px",
-          };
+      for (const r of startRects) {
+        const style = {
+          top: startPixelTop + "px",
+          left: r.left + "px",
+          height: lineHeight + "px",
+        };
 
-          if (r === rightmostRect) {
-            style.right = 0;
-          } else {
-            style.width = r.width + "px";
-          }
+        if (r === rightmostRect) {
+          style.right = 0;
+        } else {
+          style.width = r.width + "px";
+        }
 
-          return $.div({ className: regionClassName, style });
-        }),
-      );
+        children.push(buildRegion(regionClassName, style));
+      }
 
       if (screenRange.end.row - screenRange.start.row > 1) {
         // If there's at least one fully selected row in between the starting
         // and ending lines of the selection, we can represent all of it with a
         // single decoration.
         children.push(
-          $.div({
-            className: regionClassName,
-            style: {
-              position: "absolute",
-              boxSizing: "border-box",
-              top: startPixelTop + lineHeight + "px",
-              left: 0,
-              right: 0,
-              height: endPixelTop - startPixelTop - lineHeight * 2 + "px",
-            },
+          buildRegion(regionClassName, {
+            top: startPixelTop + lineHeight + "px",
+            left: 0,
+            right: 0,
+            height: endPixelTop - startPixelTop - lineHeight * 2 + "px",
           }),
         );
       }
@@ -5414,28 +5614,35 @@ class HighlightComponent {
             leftmostRect = startRect;
           }
         }
-        children.push(
-          ...endRects.map((r) => {
-            let style = {
-              position: "absolute",
-              boxSizing: "border-box",
-              top: endPixelTop - lineHeight + "px",
-              left: r.left + "px",
-              width: r.width + "px",
-              height: lineHeight + "px",
-            };
-            if (r === leftmostRect) {
-              style.width = r.left + r.width + "px";
-              style.left = 0;
-            }
-            return $.div({ className: regionClassName, style });
-          }),
-        );
+        for (const r of endRects) {
+          const style = {
+            top: endPixelTop - lineHeight + "px",
+            left: r.left + "px",
+            width: r.width + "px",
+            height: lineHeight + "px",
+          };
+          if (r === leftmostRect) {
+            style.width = r.left + r.width + "px";
+            style.left = 0;
+          }
+          children.push(buildRegion(regionClassName, style));
+        }
       }
     }
 
-    return $.div({ className: "highlight " + className }, children);
+    this.element.replaceChildren(...children);
   }
+}
+
+function buildRegion(className, style) {
+  const region = document.createElement("div");
+  region.className = className;
+  region.style.position = "absolute";
+  region.style.boxSizing = "border-box";
+  for (const key in style) {
+    region.style[key] = style[key];
+  }
+  return region;
 }
 
 class OverlayComponent {
@@ -5731,6 +5938,83 @@ function debounce(fn, wait) {
     timestamp = Date.now();
     if (!timeout) timeout = setTimeout(later, wait);
   };
+}
+
+// Fallback document scheduler used when no scheduler has been installed via
+// `TextEditorComponent.setScheduler` (i.e. outside a full editor window).
+// Matches the view registry's contract: `updateDocument` enqueues DOM writes,
+// `readDocument` enqueues DOM reads, and both run on the next animation frame
+// with all writes flushed before any read to avoid layout thrashing.
+class DefaultScheduler {
+  constructor() {
+    this.updateRequests = [];
+    this.readRequests = [];
+    this.pendingAnimationFrame = null;
+    this.performUpdates = this.performUpdates.bind(this);
+    this.nextUpdatePromise = null;
+    this.resolveNextUpdatePromise = null;
+  }
+
+  updateDocument(fn) {
+    this.updateRequests.push(fn);
+    if (!this.pendingAnimationFrame) {
+      this.pendingAnimationFrame = window.requestAnimationFrame(this.performUpdates);
+    }
+  }
+
+  readDocument(fn) {
+    this.readRequests.push(fn);
+    if (!this.pendingAnimationFrame) {
+      this.pendingAnimationFrame = window.requestAnimationFrame(this.performUpdates);
+    }
+  }
+
+  getNextUpdatePromise() {
+    if (!this.nextUpdatePromise) {
+      this.nextUpdatePromise = new Promise((resolve) => {
+        this.resolveNextUpdatePromise = resolve;
+      });
+    }
+    return this.nextUpdatePromise;
+  }
+
+  performUpdates() {
+    let completed = false;
+    try {
+      while (this.updateRequests.length > 0) {
+        this.updateRequests.shift()();
+      }
+
+      // The pending frame is not cleared until all update requests are
+      // processed, so updates requested within other updates run in the
+      // current frame.
+      this.pendingAnimationFrame = null;
+
+      while (this.readRequests.length > 0) {
+        this.readRequests.shift()();
+      }
+
+      completed = true;
+    } finally {
+      // A throwing request must not jam the scheduler: without this, the stale
+      // frame handle would prevent all future updates from ever being
+      // scheduled. Drain the remaining requests on a new frame and let the
+      // exception propagate.
+      if (!completed) {
+        this.pendingAnimationFrame =
+          this.updateRequests.length > 0 || this.readRequests.length > 0
+            ? window.requestAnimationFrame(this.performUpdates)
+            : null;
+      }
+
+      if (this.nextUpdatePromise && (completed || this.pendingAnimationFrame == null)) {
+        const resolveNextUpdatePromise = this.resolveNextUpdatePromise;
+        this.nextUpdatePromise = null;
+        this.resolveNextUpdatePromise = null;
+        resolveNextUpdatePromise();
+      }
+    }
+  }
 }
 
 class NodePool {

@@ -130,6 +130,10 @@ module.exports = async function ({ blobStore }) {
       const atomEnvironment = new AtomEnvironment(params);
       atomEnvironment.initialize(params);
       TextEditor.setScheduler(atomEnvironment.views);
+      // The editor component has its own scheduler hook; etch consumers (the
+      // dock and bundled packages) need the view registry installed separately
+      // so their updates stay coordinated during specs.
+      require("@lumine-code/etch").setScheduler(atomEnvironment.views);
       return atomEnvironment;
     };
 
