@@ -3,7 +3,7 @@
 import { CompositeDisposable, Disposable } from "atom";
 import path from "path";
 import fs from "fs";
-import temp from "temp";
+import temp from "@lumine-code/temp";
 
 import archive from "./archive";
 import getIconServices from "./get-icon-services";
