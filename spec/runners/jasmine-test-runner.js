@@ -14,6 +14,7 @@ const path = require("path");
 const { ipcRenderer } = require("electron");
 const { ConsoleReporter } = require("@jasminejs/reporters");
 const ListReporter = require("../helpers/jasmine-list-reporter");
+const focusTestWindow = require("../../src/focus-test-window");
 
 temp.track();
 
@@ -59,6 +60,10 @@ module.exports = function ({ logFile, headless, testPaths, buildAtomEnvironment 
 
   if (process.env.CI) {
     disableFocusMethods();
+    // Xvfb and Windows CI hosts may take focus away from the renderer between
+    // specs. Restore the declared precondition before each spec instead of
+    // allowing focus-sensitive groups to inherit ambient host state.
+    window.beforeEach(focusTestWindow);
   }
 
   return loadSpecsAndRunThem(logFile, headless, testPaths).then((result) => {
