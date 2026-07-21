@@ -6,6 +6,7 @@ const { Disposable } = require("event-kit");
 const Point = require("../src/point");
 const Range = require("../src/range");
 const TextBuffer = require("../src/text-buffer");
+const TextBufferFile = require("../src/text-buffer-file");
 const { TextBuffer: NativeTextBuffer } = require("@lumine-code/superstring");
 const fsAdmin = require("fs-admin");
 
@@ -1131,8 +1132,14 @@ describe("TextBuffer IO", () => {
       expect(events.length).toBe(0);
     });
 
-    it("does not fire duplicate change events when multiple changes happen on disk", async (done) => {
-      await buffer.getFileWatchStartPromise();
+    it("does not fire duplicate change events when multiple changes happen on disk", async () => {
+      // Drive the file notifications explicitly. The path-watcher integration
+      // is covered separately; this spec needs to control exactly when each
+      // debounced load begins so it can exercise overlapping loads without
+      // depending on an OS watcher delivering three distinct write bursts.
+      const controlledFile = new ControlledFile(filePath);
+      buffer.setFile(controlledFile);
+
       const changeEvents = [];
       buffer.onWillChange(() => changeEvents.push("will-change"));
       buffer.onDidChange((_event) => changeEvents.push("did-change"));
@@ -1147,34 +1154,44 @@ describe("TextBuffer IO", () => {
       // then waiting for a period of time longer than the debounce interval,
       // and then performing the actual load.
       const originalLoad = buffer.buffer.load;
+      const pendingLoads = [];
+      let resolveLoadStarted;
       spyOn(NativeTextBuffer.prototype, "load").and.callFake(function (pathToLoad, ...args) {
         const pathToLoadCopy = temp.openSync("atom").path;
         fs.writeFileSync(pathToLoadCopy, fs.readFileSync(pathToLoad));
-        // Keep every load in flight until all three write bursts have had
-        // enough time to produce their debounced change notifications.
-        return timeoutPromise(buffer.fileChangeDelay * 4).then(() =>
-          originalLoad.call(this, pathToLoadCopy, ...args),
-        );
+        const loadStarted = resolveLoadStarted;
+        resolveLoadStarted = null;
+
+        let release;
+        const promise = new Promise((resolve) => {
+          release = () => resolve(originalLoad.call(this, pathToLoadCopy, ...args));
+        });
+        pendingLoads.push({ promise, release });
+        loadStarted();
+        return promise;
       });
 
-      fs.writeFileSync(filePath, "a");
-      fs.writeFileSync(filePath, "ab");
-      setTimeout(() => {
-        fs.writeFileSync(filePath, "abc");
-        fs.writeFileSync(filePath, "abcd");
-        setTimeout(() => {
-          fs.writeFileSync(filePath, "abcde");
-          fs.writeFileSync(filePath, "abcdef");
-        }, buffer.fileChangeDelay + 50);
-      }, buffer.fileChangeDelay + 50);
+      const writeBurstAndWaitForLoad = async (intermediateText, finalText) => {
+        const loadStarted = new Promise((resolve) => {
+          resolveLoadStarted = resolve;
+        });
+        fs.writeFileSync(filePath, intermediateText);
+        controlledFile.emitDidChange();
+        fs.writeFileSync(filePath, finalText);
+        controlledFile.emitDidChange();
+        await loadStarted;
+      };
 
-      const subscription = buffer.onDidChange(() => {
-        if (buffer.getText() === "abcdef") {
-          expect(changeEvents).toEqual(["will-change", "did-change"]);
-          subscription.dispose();
-          done();
-        }
-      });
+      await writeBurstAndWaitForLoad("a", "ab");
+      await writeBurstAndWaitForLoad("abc", "abcd");
+      await writeBurstAndWaitForLoad("abcde", "abcdef");
+
+      const changed = new Promise((resolve) => buffer.onDidChange(resolve));
+      for (const { release } of pendingLoads) release();
+      await Promise.all([changed, ...pendingLoads.map(({ promise }) => promise)]);
+
+      expect(buffer.getText()).toBe("abcdef");
+      expect(changeEvents).toEqual(["will-change", "did-change"]);
     });
   });
 
@@ -1308,6 +1325,19 @@ class ReverseCaseFile {
   onDidChange(callback) {
     const watcher = fs.watch(this.path, callback);
     return new Disposable(() => watcher.close());
+  }
+}
+
+class ControlledFile extends TextBufferFile {
+  onDidChange(callback) {
+    this.didChangeCallback = callback;
+    return new Disposable(() => {
+      if (this.didChangeCallback === callback) this.didChangeCallback = null;
+    });
+  }
+
+  emitDidChange() {
+    this.didChangeCallback();
   }
 }
 

@@ -58,7 +58,7 @@ module.exports = async function ({ blobStore }) {
       const currentWindow = remote.getCurrentWindow();
       if (process.env.CI) {
         currentWindow.show();
-        currentWindow.focus();
+        await focusTestWindow(remote, currentWindow);
       } else {
         currentWindow.showInactive();
       }
@@ -169,3 +169,22 @@ module.exports = async function ({ blobStore }) {
     }
   }
 };
+
+async function focusTestWindow(remote, currentWindow) {
+  const webContents = remote.getCurrentWebContents();
+  const timeoutAt = Date.now() + 10000;
+
+  // BrowserWindow.focus() requests native-window focus, while
+  // WebContents.focus() focuses the page itself. Both transitions are
+  // asynchronous on CI hosts, so do not start focus-sensitive specs until the
+  // renderer confirms that they have completed.
+  while (!document.hasFocus()) {
+    currentWindow.focus();
+    webContents.focus();
+    await new Promise((resolve) => setTimeout(resolve, 50));
+
+    if (Date.now() >= timeoutAt) {
+      throw new Error("Timed out waiting for the CI spec window to receive focus");
+    }
+  }
+}
