@@ -40,12 +40,13 @@ function scaleMouseDragAutoscrollDelta(delta) {
 
 // The document scheduler used to batch DOM reads and writes across editor
 // updates. In a Lumine window this is the view registry (`atom.views`),
-// installed at window initialization; the fallback DefaultScheduler only
-// serves standalone component usage outside a full editor environment.
+// installed at window initialization. Standalone component usage outside a
+// full editor environment falls back to etch's default scheduler — the module
+// is loaded in every window anyway for the dock and several bundled packages.
 let scheduler = null;
 
 function getScheduler() {
-  if (!scheduler) scheduler = new DefaultScheduler();
+  if (!scheduler) scheduler = require("@lumine-code/etch").getScheduler();
   return scheduler;
 }
 
@@ -4400,81 +4401,4 @@ function debounce(fn, wait) {
     timestamp = Date.now();
     if (!timeout) timeout = setTimeout(later, wait);
   };
-}
-
-// Fallback document scheduler used when no scheduler has been installed via
-// `TextEditorComponent.setScheduler` (i.e. outside a full editor window).
-// Matches the view registry's contract: `updateDocument` enqueues DOM writes,
-// `readDocument` enqueues DOM reads, and both run on the next animation frame
-// with all writes flushed before any read to avoid layout thrashing.
-class DefaultScheduler {
-  constructor() {
-    this.updateRequests = [];
-    this.readRequests = [];
-    this.pendingAnimationFrame = null;
-    this.performUpdates = this.performUpdates.bind(this);
-    this.nextUpdatePromise = null;
-    this.resolveNextUpdatePromise = null;
-  }
-
-  updateDocument(fn) {
-    this.updateRequests.push(fn);
-    if (!this.pendingAnimationFrame) {
-      this.pendingAnimationFrame = window.requestAnimationFrame(this.performUpdates);
-    }
-  }
-
-  readDocument(fn) {
-    this.readRequests.push(fn);
-    if (!this.pendingAnimationFrame) {
-      this.pendingAnimationFrame = window.requestAnimationFrame(this.performUpdates);
-    }
-  }
-
-  getNextUpdatePromise() {
-    if (!this.nextUpdatePromise) {
-      this.nextUpdatePromise = new Promise((resolve) => {
-        this.resolveNextUpdatePromise = resolve;
-      });
-    }
-    return this.nextUpdatePromise;
-  }
-
-  performUpdates() {
-    let completed = false;
-    try {
-      while (this.updateRequests.length > 0) {
-        this.updateRequests.shift()();
-      }
-
-      // The pending frame is not cleared until all update requests are
-      // processed, so updates requested within other updates run in the
-      // current frame.
-      this.pendingAnimationFrame = null;
-
-      while (this.readRequests.length > 0) {
-        this.readRequests.shift()();
-      }
-
-      completed = true;
-    } finally {
-      // A throwing request must not jam the scheduler: without this, the stale
-      // frame handle would prevent all future updates from ever being
-      // scheduled. Drain the remaining requests on a new frame and let the
-      // exception propagate.
-      if (!completed) {
-        this.pendingAnimationFrame =
-          this.updateRequests.length > 0 || this.readRequests.length > 0
-            ? window.requestAnimationFrame(this.performUpdates)
-            : null;
-      }
-
-      if (this.nextUpdatePromise && (completed || this.pendingAnimationFrame == null)) {
-        const resolveNextUpdatePromise = this.resolveNextUpdatePromise;
-        this.nextUpdatePromise = null;
-        this.resolveNextUpdatePromise = null;
-        resolveNextUpdatePromise();
-      }
-    }
-  }
 }
