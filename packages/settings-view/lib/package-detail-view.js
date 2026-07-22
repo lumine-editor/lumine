@@ -363,6 +363,8 @@ export default class PackageDetailView {
     this.applyChapterVisibility();
     // Start each chapter from the top.
     this.element.scrollTop = 0;
+    // The sidebar TOC is only shown on the README chapter.
+    this.publishTableOfContents();
   }
 
   // Whether a chapter's section actually has something to show, so we don't offer
@@ -689,6 +691,7 @@ export default class PackageDetailView {
       this.renderLicense();
     }
     this.rebuildChapters();
+    this.publishTableOfContents();
   }
 
   setConfigSectionsVisible(visible) {
@@ -776,6 +779,12 @@ export default class PackageDetailView {
   publishTableOfContents() {
     if (!this.settingsView || typeof this.settingsView.showTableOfContents !== "function") return;
     if (this.element.style.display === "none") return;
+
+    // The TOC belongs to the README chapter only; hide it on any other chapter.
+    if (this.activeChapter !== "readme") {
+      this.settingsView.clearTableOfContents();
+      return;
+    }
 
     const readme = this.readmeView && this.readmeView.packageReadme;
     const headings = readme ? readme.querySelectorAll("h1, h2, h3, h4, h5, h6") : [];

@@ -287,6 +287,11 @@ describe("PackageDetailView", function () {
     const labels = showToc.mostRecentCall.args[0].map((entry) => entry.label);
     expect(labels.some((label) => label.includes("Features"))).toBe(true);
     expect(labels.some((label) => label.includes("Usage"))).toBe(true);
+
+    // Switching away from the README chapter clears the TOC.
+    const clearToc = spyOn(settingsView, "clearTableOfContents").andCallThrough();
+    view.setActiveChapter("license");
+    expect(clearToc).toHaveBeenCalled();
   });
 
   it("shows the full owner/repo in the repo link for a shorthand repository", function () {
