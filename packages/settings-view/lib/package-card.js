@@ -1026,10 +1026,24 @@ export default class PackageCard {
     // Reflect the INSTALLED ref in the version selector rather than the catalog's
     // default. Otherwise a package installed from a branch or a non-latest tag
     // shows the catalog's latest tag as if that were installed.
-    const installedSelector = this.pack.apmInstallSource && this.pack.apmInstallSource.selector;
+    const install = this.pack.apmInstallSource;
+    const installedSelector = install && install.selector;
     if (installedSelector) {
       this.pack.selectedRef = installedSelector;
       this.pack.previewVersion = false;
+    }
+    // A branch/commit update recorded on the (cached) catalog entry — its
+    // latestSha differs from the installed commit — is offered on the browse
+    // card too, so an advanced master branch shows "Update" without opening the
+    // Updates tab. The receipt is adopted above, after the constructor's own
+    // newSha check, so it is repeated here.
+    if (
+      install &&
+      install.type === "git" &&
+      this.pack.latestSha &&
+      install.sha !== this.pack.latestSha
+    ) {
+      this.newSha = this.pack.latestSha;
     }
     if (
       semver.valid(metadata.version) &&
