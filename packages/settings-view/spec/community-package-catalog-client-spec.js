@@ -131,6 +131,50 @@ describe("CommunityPackageCatalogClient", function () {
     );
   });
 
+  it("inspects an installed update at its exact SHA through Git", function () {
+    const storage = createStorage();
+    const client = new CommunityPackageCatalogClient({
+      packageManager: createPackageManager(),
+      storage,
+      atomVersion: () => "1.132.1",
+    });
+    spyOn(client, "fetchManifest").andReturn(
+      Promise.resolve({
+        name: "renamed-package",
+        version: "2.0.0",
+        repository: "owner/package",
+        engines: { atom: "*" },
+      }),
+    );
+
+    waitsForPromise(() =>
+      client
+        .inspectResolvedManifest(
+          {
+            name: "old-package",
+            apmInstallSource: {
+              origin: "github.com/owner/package",
+              repository: "owner/package",
+            },
+          },
+          SHA_2,
+          { type: "latest", value: "v2.0.0" },
+        )
+        .then((metadata) => {
+          expect(metadata.name).toBe("renamed-package");
+          expect(client.fetchManifest).toHaveBeenCalledWith(
+            {
+              originKey: "github.com/owner/package",
+              repository: "owner/package",
+              manualSource: true,
+            },
+            SHA_2,
+            null,
+          );
+        }),
+    );
+  });
+
   it("uses the persistent cache without automatic revalidation", function () {
     const catalogUrl = "https://catalog.test/sources.json";
     const storage = createStorage();

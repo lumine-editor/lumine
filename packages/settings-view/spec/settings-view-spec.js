@@ -493,6 +493,40 @@ describe("SettingsView", function () {
         expect(detailInitial).not.toBe(detailAfterReactivate);
       });
 
+      it("recreates an origin-keyed detail panel when a selected ref changes the package name", function () {
+        settingsView = main.createSettingsView({
+          packageManager,
+          snippetsProvider: SnippetsProvider,
+        });
+        const originKey = "github.com/owner/renamed-package";
+        const detailInitial = settingsView.getOrCreatePanel(`community:${originKey}`, {
+          pack: {
+            name: "old-package-name",
+            repository: "owner/renamed-package",
+            originKey,
+            resolvedSha: "a".repeat(40),
+            selectedRef: { type: "tag", value: "v1.0.0" },
+            status: "ready",
+            engines: { atom: "*" },
+          },
+        });
+        const detailAfterRename = settingsView.getOrCreatePanel(`community:${originKey}`, {
+          pack: {
+            name: "new-package-name",
+            repository: "owner/renamed-package",
+            originKey,
+            resolvedSha: "b".repeat(40),
+            selectedRef: { type: "tag", value: "v2.0.0" },
+            status: "ready",
+            engines: { atom: "*" },
+          },
+        });
+
+        expect(detailAfterRename).not.toBe(detailInitial);
+        expect(detailAfterRename.pack.name).toBe("new-package-name");
+        expect(settingsView.panelsByName[`community:${originKey}`]).toBe(detailAfterRename);
+      });
+
       it("passes the URI to a pane's beforeShow() method on settings view initialization", function () {
         const InstallPanel = require("../lib/install-panel");
         spyOn(InstallPanel.prototype, "beforeShow");

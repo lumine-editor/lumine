@@ -261,6 +261,45 @@ describe("PackageCard", function () {
         "Branch — Next",
       ]);
     });
+
+    it("blocks a ref whose manifest renamed an already-installed origin", function () {
+      setPackageStatusSpies({ installed: false, disabled: false });
+      let installed = {
+        name: "old-package-name",
+        originKey: "github.com/owner/repo",
+      };
+      spyOn(packageManager, "findInstalledPackageByOrigin").andCallFake(() => installed);
+      spyOn(packageManager, "install");
+      card = new PackageCard(
+        {
+          name: "new-package-name",
+          repository: "owner/repo",
+          originKey: "github.com/owner/repo",
+          status: "ready",
+          engines: { atom: "*" },
+          resolvedSha: "a".repeat(40),
+        },
+        new SettingsView(),
+        packageManager,
+      );
+      jasmine.attachToDOM(card.element);
+
+      expect(card.refs.installButton).toBeVisible();
+      expect(card.refs.installButton).toHaveClass("disabled");
+      expect(card.refs.replaceButton).not.toBeVisible();
+      expect(card.refs.originRenameWarning.textContent).toContain("old-package-name");
+      expect(card.refs.originRenameWarning.textContent).toContain("new-package-name");
+      card.refs.installButton.click();
+      expect(packageManager.install).not.toHaveBeenCalled();
+
+      installed = null;
+      packageManager.emitPackageEvent("uninstalled", {
+        name: "old-package-name",
+        originKey: "github.com/owner/repo",
+      });
+      expect(card.refs.installButton).not.toHaveClass("disabled");
+      expect(card.refs.originRenameWarning).not.toBeVisible();
+    });
   });
 
   it("marks Pulsar-sourced packages with a purple install action", function () {

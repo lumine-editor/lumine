@@ -276,6 +276,16 @@ export default class SettingsView {
 
   getOrCreatePanel(name, options) {
     let panel = this.panelsByName[name];
+    if (
+      panel instanceof PackageDetailView &&
+      options &&
+      options.pack &&
+      this.packageDetailRevisionChanged(panel.pack, options.pack)
+    ) {
+      panel.destroy();
+      delete this.panelsByName[name];
+      panel = null;
+    }
     if (panel) return panel;
 
     if (name in this.panelCreateCallbacks) {
@@ -292,6 +302,19 @@ export default class SettingsView {
     }
 
     return panel;
+  }
+
+  packageDetailRevisionChanged(currentPack, nextPack) {
+    const current = (currentPack && currentPack.metadata) || currentPack || {};
+    const next = (nextPack && nextPack.metadata) || nextPack || {};
+    const currentRef = current.selectedRef || {};
+    const nextRef = next.selectedRef || {};
+    return (
+      current.name !== next.name ||
+      current.resolvedSha !== next.resolvedSha ||
+      currentRef.type !== nextRef.type ||
+      currentRef.value !== nextRef.value
+    );
   }
 
   makePanelMenuActive(name) {

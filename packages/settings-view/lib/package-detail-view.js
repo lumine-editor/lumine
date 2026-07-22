@@ -620,10 +620,11 @@ export default class PackageDetailView {
   }
 
   isSamePackage(pack) {
-    if (!pack || this.pack.name !== pack.name) return false;
+    if (!pack) return false;
     const currentOrigin = packageOrigin(this.pack.metadata || this.pack);
     const eventOrigin = packageOrigin(pack.metadata || pack);
-    return !currentOrigin || !eventOrigin || currentOrigin === eventOrigin;
+    if (currentOrigin && eventOrigin) return currentOrigin === eventOrigin;
+    return this.pack.name === pack.name;
   }
 
   openMarkdownFile(path) {

@@ -10,7 +10,7 @@ const {
 } = require("../../../src/package-source"); // eslint-disable-line n/no-unpublished-require
 const PackageInstallationService = require("../../../src/package-installation-service"); // eslint-disable-line n/no-unpublished-require
 
-const { packageCoordinate, packageOriginKey } = require("./utils");
+const { packageCoordinate, packageOrigin, packageOriginKey } = require("./utils");
 
 // The HTTP clients pull in `request` (~120ms to require), which dominates
 // package activation. They are only needed when the user opens the Install or
@@ -634,6 +634,22 @@ module.exports = class PackageManager {
     return [].concat(packages.dev, packages.user, packages.core, packages.git);
   }
 
+  findInstalledPackageByOrigin(originKey) {
+    const normalizedOrigin = packageOriginKey(originKey);
+    if (!normalizedOrigin) return null;
+
+    const packages = this.getLocalPackages();
+    return (
+      [].concat(packages.dev, packages.user, packages.git).find((pack) => {
+        return packageOrigin(pack) === normalizedOrigin;
+      }) || null
+    );
+  }
+
+  inspectPackageUpdate(pack, resolvedSha, selectedRef) {
+    return this.getCatalogClient().inspectResolvedManifest(pack, resolvedSha, selectedRef);
+  }
+
   async getGitPackageUpdates() {
     const updates = [];
     const gitPackages = this.getLocalPackages().git;
@@ -686,11 +702,29 @@ module.exports = class PackageManager {
           latestSha = stdout.trim().split(/\s+/)[0];
         }
         if (latestSha && latestSha !== currentSha) {
+          const resolvedRef = resolved ? resolved.selector : pack.apmInstallSource.selector;
+          const updateMetadata = await this.inspectPackageUpdate(pack, latestSha, resolvedRef);
+          if (updateMetadata.name !== pack.name) {
+            updates.push(
+              _.extend({}, pack, {
+                renamedPackage: {
+                  from: pack.name,
+                  to: updateMetadata.name,
+                  sha: latestSha,
+                },
+                originWarning:
+                  `Repository update changes the package name from "${pack.name}" to ` +
+                  `"${updateMetadata.name}". This is not an update: uninstall ` +
+                  `"${pack.name}" before installing "${updateMetadata.name}".`,
+              }),
+            );
+            continue;
+          }
           updates.push(
             _.extend({}, pack, {
               latestSha,
               latestVersion,
-              resolvedRef: resolved ? resolved.selector : pack.apmInstallSource.selector,
+              resolvedRef,
             }),
           );
         }

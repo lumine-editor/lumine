@@ -172,6 +172,33 @@ describe("PackageManager", function () {
       );
     }));
 
+  describe("::findInstalledPackageByOrigin()", function () {
+    it("finds a community install under its previous package name and ignores built-ins", function () {
+      spyOn(packageManager, "getLocalPackages").andReturn({
+        dev: [],
+        user: [
+          {
+            name: "old-package-name",
+            repository: "https://github.com/owner/repo",
+          },
+        ],
+        git: [],
+        core: [
+          {
+            name: "built-in",
+            repository: "https://github.com/owner/builtin",
+            packageKind: "builtin",
+          },
+        ],
+      });
+
+      expect(packageManager.findInstalledPackageByOrigin("github.com/owner/repo").name).toBe(
+        "old-package-name",
+      );
+      expect(packageManager.findInstalledPackageByOrigin("github.com/owner/builtin")).toBe(null);
+    });
+  });
+
   describe("::install()", function () {
     it("fails for invalid repository names", function () {
       const installCallback = jasmine.createSpy("installCallback");
@@ -561,6 +588,7 @@ describe("PackageManager", function () {
           selector: { type: "latest", value: "v2.0.0" },
         }),
       );
+      spyOn(packageManager, "inspectPackageUpdate").andReturn(Promise.resolve({ name: "sample" }));
 
       waitsForPromise(() =>
         packageManager.getGitPackageUpdates().then((updates) => {
@@ -568,6 +596,46 @@ describe("PackageManager", function () {
           expect(updates[0].latestSha).toBe("2222222222222222222222222222222222222222");
           expect(updates[0].latestVersion).toBe("2.0.0");
           expect(updates[0].resolvedRef).toEqual({ type: "latest", value: "v2.0.0" });
+        }),
+      );
+    });
+
+    it("does not offer an update when the new commit changes the package name", function () {
+      spyOn(packageManager, "getLocalPackages").andReturn({
+        git: [
+          {
+            name: "old-package-name",
+            version: "1.0.0",
+            apmInstallSource: {
+              type: "git",
+              source: "owner/sample",
+              updatePolicy: "latest-tag",
+              sha: "1111111111111111111111111111111111111111",
+            },
+          },
+        ],
+      });
+      spyOn(packageManager, "resolvePackageSource").andReturn(
+        Promise.resolve({
+          sha: "2222222222222222222222222222222222222222",
+          version: "2.0.0",
+          selector: { type: "latest", value: "v2.0.0" },
+        }),
+      );
+      spyOn(packageManager, "inspectPackageUpdate").andReturn(
+        Promise.resolve({ name: "new-package-name" }),
+      );
+
+      waitsForPromise(() =>
+        packageManager.getGitPackageUpdates().then((updates) => {
+          expect(updates.length).toBe(1);
+          expect(updates[0].renamedPackage).toEqual({
+            from: "old-package-name",
+            to: "new-package-name",
+            sha: "2222222222222222222222222222222222222222",
+          });
+          expect(updates[0].latestSha).toBeUndefined();
+          expect(updates[0].originWarning).toContain("not an update");
         }),
       );
     });

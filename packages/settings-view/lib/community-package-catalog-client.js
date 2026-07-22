@@ -594,6 +594,53 @@ module.exports = class CommunityPackageCatalogClient {
     return hydrated;
   }
 
+  async inspectResolvedManifest(pack, resolvedSha, selectedRef) {
+    if (!/^[0-9a-f]{40}$/i.test(resolvedSha || "")) {
+      throw new Error("A complete resolved commit SHA is required to inspect an update.");
+    }
+    const install = pack.apmInstallSource || {};
+    const source = install.repository || install.source || pack.repository;
+    const parsed = parsePackageSource(source);
+    const originKey =
+      install.origin || pack.originKey || normalizeRepositoryOrigin(parsed.repository);
+    if (!originKey) throw new Error("The installed package receipt has no valid origin.");
+
+    const cache = this.readCache() || {
+      schemaVersion: CACHE_SCHEMA_VERSION,
+      lastFetch: null,
+      catalogSources: [],
+      manifests: {},
+      readmes: {},
+      packages: {},
+    };
+    cache.manifests ||= {};
+    const cacheKey = `${originKey}@${resolvedSha.toLowerCase()}`;
+    let metadata = cache.manifests[cacheKey];
+    if (!metadata) {
+      // Receipts may point at private HTTPS or SSH repositories. Inspect them
+      // through Git so the user's normal Git credentials apply; catalog
+      // hydration remains restricted to public sources and raw adapters.
+      metadata = await this.fetchManifest(
+        { originKey, repository: parsed.repository, manualSource: true },
+        resolvedSha,
+        null,
+      );
+      cache.manifests[cacheKey] = metadata;
+      this.writeCache(cache);
+    }
+
+    const semanticTag =
+      selectedRef && (selectedRef.type === "tag" || selectedRef.type === "latest")
+        ? selectedRef.value
+        : null;
+    const currentAtomVersion = this.atomVersion();
+    return validateCommunityPackageMetadata(metadata, {
+      originKey,
+      semanticTag,
+      atomVersion: typeof currentAtomVersion === "string" ? currentAtomVersion.split("-")[0] : null,
+    });
+  }
+
   listRefs(source, includeBranches) {
     if (!this.packageManager) throw new Error("Git ref resolver is unavailable.");
     return listPackageRepositoryRefs(

@@ -163,6 +163,11 @@ export default class PackageCard {
           {this.pack.originWarning ? (
             <span className="package-catalog-status status-stale">{this.pack.originWarning}</span>
           ) : null}
+          <span
+            ref="originRenameWarning"
+            className="package-catalog-status status-stale"
+            style={{ display: "none" }}
+          />
           <div ref="packageMessage" className="package-message" />
         </div>
 
@@ -769,6 +774,7 @@ export default class PackageCard {
   // unrelated package — and explain why on hover. Uninstall/settings stay
   // hidden so they can't act on the unrelated package.
   displayConflictingOriginState() {
+    this.clearOriginRenameWarning();
     this.originConflict = true;
     this.refs.updateButtonGroup.style.display = "none";
     this.refs.packageActionButtonGroup.style.display = "none";
@@ -849,6 +855,7 @@ export default class PackageCard {
   }
 
   displayInstalledState() {
+    this.clearOriginRenameWarning();
     this.clearInstallNote();
     if (this.newVersion || this.newSha) {
       this.refs.updateButtonGroup.style.display = "";
@@ -886,8 +893,14 @@ export default class PackageCard {
     this.refs.replaceButton.style.display = "none";
     this.refs.installButton.style.display = "";
     const validationError = this.validationBlockingMessage();
+    const renamedInstall = validationError ? null : this.installedSameOriginInOtherSlot();
+    this.updateOriginRenameWarning(renamedInstall);
     if (validationError) {
       this.setInstallNote(validationError, true);
+      this.refs.installButtonGroup.style.display = "";
+      this.refs.updateButtonGroup.style.display = "none";
+    } else if (renamedInstall) {
+      this.setInstallNote(this.originRenameMessage(renamedInstall), true);
       this.refs.installButtonGroup.style.display = "";
       this.refs.updateButtonGroup.style.display = "none";
     } else if (!this.hasCompatibleVersion) {
@@ -906,6 +919,35 @@ export default class PackageCard {
       this.refs.installButtonGroup.style.display = "";
     }
     this.refs.packageActionButtonGroup.style.display = "none";
+  }
+
+  installedSameOriginInOtherSlot() {
+    const originKey = packageOrigin(this.pack);
+    if (!originKey || !this.packageManager.findInstalledPackageByOrigin) return null;
+    const installed = this.packageManager.findInstalledPackageByOrigin(originKey);
+    return installed && installed.name !== this.pack.name ? installed : null;
+  }
+
+  originRenameMessage(installed) {
+    return (
+      `This repository is already installed as “${installed.name}”. ` +
+      `Uninstall it before installing a ref named “${this.pack.name}”.`
+    );
+  }
+
+  updateOriginRenameWarning(installed) {
+    if (!installed) {
+      this.clearOriginRenameWarning();
+      return;
+    }
+    this.refs.originRenameWarning.textContent = this.originRenameMessage(installed);
+    this.refs.originRenameWarning.style.display = "";
+  }
+
+  clearOriginRenameWarning() {
+    if (!this.refs.originRenameWarning) return;
+    this.refs.originRenameWarning.textContent = "";
+    this.refs.originRenameWarning.style.display = "none";
   }
 
   displayGitPackageInstallInformation() {
@@ -1047,9 +1089,8 @@ export default class PackageCard {
     );
   }
 
-  // The event's pack shares this card's NAME (subscribeToPackageEvent filters by
-  // name). Returns whether it is also the SAME package by origin — i.e. the
-  // event is about this card's package rather than a different same-named one.
+  // Returns whether the event is about this card's origin rather than a
+  // different package that merely shares its name.
   isSameOriginEvent(pack) {
     const cardOrigin = packageOrigin(this.pack);
     const eventOrigin = packageOrigin(pack);
@@ -1076,8 +1117,11 @@ export default class PackageCard {
           pack = pack.pack;
         }
 
-        const packageName = pack.name;
-        if (packageName === this.pack.name) {
+        if (!pack) return;
+        const sameName = pack.name === this.pack.name;
+        const cardOrigin = packageOrigin(this.pack);
+        const eventOrigin = packageOrigin(pack);
+        if (sameName || (cardOrigin && eventOrigin && cardOrigin === eventOrigin)) {
           callback(pack, error);
         }
       }),
