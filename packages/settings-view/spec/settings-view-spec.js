@@ -105,6 +105,26 @@ describe("SettingsView", function () {
     });
   });
 
+  describe("the default panel", function () {
+    it("defaults to the Search panel when settings search is enabled", function () {
+      atom.config.set("settings-view.enableSettingsSearch", true);
+      const view = main.createSettingsView({ packageManager, snippetsProvider: SnippetsProvider });
+      jasmine.attachToDOM(view.element);
+      view.initializePanels();
+      expect(view.activePanel).toEqual({ name: "Search", options: {} });
+      view.destroy();
+    });
+
+    it("falls back to the Core panel when settings search is disabled", function () {
+      atom.config.set("settings-view.enableSettingsSearch", false);
+      const view = main.createSettingsView({ packageManager, snippetsProvider: SnippetsProvider });
+      jasmine.attachToDOM(view.element);
+      view.initializePanels();
+      expect(view.activePanel).toEqual({ name: "Core", options: {} });
+      view.destroy();
+    });
+  });
+
   describe(".addCorePanel(name, iconName, view)", () =>
     it("adds a menu entry to the left and a panel that can be activated by clicking it", function () {
       settingsView.addCorePanel("Panel 1", "panel1", function () {

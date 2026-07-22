@@ -184,7 +184,8 @@ export default class SettingsView {
     this.showDeferredPanel();
 
     if (!this.activePanel) {
-      this.showPanel("Core");
+      // Default to the Search panel when it is available, otherwise Core.
+      this.showPanel(this.panelCreateCallbacks["Search"] ? "Search" : "Core");
     }
 
     if (document.body.contains(this.element)) {
