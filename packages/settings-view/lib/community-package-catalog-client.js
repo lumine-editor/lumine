@@ -28,6 +28,20 @@ const MAX_CATALOG_BYTES = 2 * 1024 * 1024;
 const MAX_MANIFEST_BYTES = 1024 * 1024;
 const MAX_README_BYTES = 2 * 1024 * 1024;
 const README_CACHE_ENTRIES = 50;
+// GitHub raw paths are case-sensitive, so try the common casings/extensions.
+const LICENSE_FILENAMES = [
+  "LICENSE",
+  "LICENSE.md",
+  "LICENSE.markdown",
+  "LICENSE.txt",
+  "LICENCE",
+  "LICENCE.md",
+  "LICENCE.txt",
+  "COPYING",
+  "COPYING.md",
+  "UNLICENSE",
+];
+const LICENSE_FILE_PATTERN = /^(licen[cs]e|copying|unlicense)(?:\.|$)/i;
 
 class TaskQueue {
   constructor(limit, perKeyLimit = limit) {
@@ -601,6 +615,66 @@ module.exports = class CommunityPackageCatalogClient {
     return entry;
   }
 
+  // Lazily fetches a package's LICENSE for the resolved commit, mirroring
+  // `loadReadme`. Returns `{ body, source, filename, isMarkdown }` or null.
+  async loadLicense(pack) {
+    if (!pack.originKey || !/^[0-9a-f]{40}$/i.test(pack.resolvedSha || "")) return null;
+    const cache = this.readCache() || {
+      schemaVersion: CACHE_SCHEMA_VERSION,
+      manifests: {},
+      readmes: {},
+      licenses: {},
+      packages: {},
+      catalogSources: [],
+    };
+    cache.licenses ||= {};
+    const key = `${pack.originKey}@${pack.resolvedSha}`;
+    if (cache.licenses[key]) {
+      cache.licenses[key].accessedAt = this.now();
+      this.writeCache(cache);
+      return cache.licenses[key];
+    }
+
+    let entry = null;
+    if (pack.originKey.startsWith("github.com/") && !pack.manualSource) {
+      const repoPath = pack.originKey.slice("github.com/".length);
+      for (const filename of LICENSE_FILENAMES) {
+        const rawUrl = `https://raw.githubusercontent.com/${repoPath}/${pack.resolvedSha}/${filename}`;
+        const body = await this.httpQueue.add(
+          () =>
+            this.requestText(rawUrl, {
+              maxBytes: MAX_README_BYTES,
+              allowNotFound: true,
+            }),
+          "raw.githubusercontent.com",
+        );
+        if (body != null) {
+          entry = {
+            body,
+            source: `https://github.com/${repoPath}/blob/${pack.resolvedSha}/${filename}`,
+            filename,
+            isMarkdown: /\.(md|markdown)$/i.test(filename),
+            accessedAt: this.now(),
+          };
+          break;
+        }
+      }
+    } else {
+      entry = await this.gitQueue.add(
+        () => this.fetchLicenseWithGit(pack),
+        hostForRepository(pack.repository),
+      );
+    }
+    if (!entry) return null;
+    cache.licenses[key] = entry;
+    const keys = Object.keys(cache.licenses).sort(
+      (left, right) => cache.licenses[right].accessedAt - cache.licenses[left].accessedAt,
+    );
+    for (const expired of keys.slice(README_CACHE_ENTRIES)) delete cache.licenses[expired];
+    this.writeCache(cache);
+    return entry;
+  }
+
   async selectRef(pack, selector) {
     let source;
     if (selector.type === "latest") source = pack.repository;
@@ -788,6 +862,48 @@ module.exports = class CommunityPackageCatalogClient {
       return {
         body: await fs.promises.readFile(filePath, "utf8"),
         source: pack.repository,
+        accessedAt: this.now(),
+      };
+    } finally {
+      await fs.promises.rm(cloneDir, { recursive: true, force: true });
+    }
+  }
+
+  async fetchLicenseWithGit(pack) {
+    if (!this.packageManager) return null;
+    const cloneDir = await fs.promises.mkdtemp(path.join(os.tmpdir(), "lumine-license-"));
+    try {
+      const git = this.packageManager.getGitCommand();
+      await this.packageManager.runProcess(git, ["init"], {
+        cwd: cloneDir,
+        timeoutMs: GIT_REF_TIMEOUT,
+      });
+      await this.packageManager.runProcess(
+        git,
+        ["remote", "add", "origin", cloneUrlForRepository(pack.repository)],
+        { cwd: cloneDir, timeoutMs: GIT_REF_TIMEOUT },
+      );
+      await this.packageManager.runProcess(
+        git,
+        ["fetch", "--depth", "1", "origin", pack.resolvedSha],
+        { cwd: cloneDir, timeoutMs: GIT_FETCH_TIMEOUT },
+      );
+      await this.packageManager.runProcess(git, ["checkout", "--detach", "FETCH_HEAD"], {
+        cwd: cloneDir,
+        timeoutMs: GIT_REF_TIMEOUT,
+      });
+      const filename = (await fs.promises.readdir(cloneDir)).find((name) =>
+        LICENSE_FILE_PATTERN.test(name),
+      );
+      if (!filename) return null;
+      const filePath = path.join(cloneDir, filename);
+      const stat = await fs.promises.stat(filePath);
+      if (!stat.isFile() || stat.size > MAX_README_BYTES) return null;
+      return {
+        body: await fs.promises.readFile(filePath, "utf8"),
+        source: pack.repository,
+        filename,
+        isMarkdown: /\.(md|markdown)$/i.test(filename),
         accessedAt: this.now(),
       };
     } finally {
