@@ -1023,6 +1023,14 @@ export default class PackageCard {
     if (metadata.apmInstallSource && !this.pack.apmInstallSource) {
       this.pack.apmInstallSource = metadata.apmInstallSource;
     }
+    // Reflect the INSTALLED ref in the version selector rather than the catalog's
+    // default. Otherwise a package installed from a branch or a non-latest tag
+    // shows the catalog's latest tag as if that were installed.
+    const installedSelector = this.pack.apmInstallSource && this.pack.apmInstallSource.selector;
+    if (installedSelector) {
+      this.pack.selectedRef = installedSelector;
+      this.pack.previewVersion = false;
+    }
     if (
       semver.valid(metadata.version) &&
       semver.valid(this.pack.version) &&

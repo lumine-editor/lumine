@@ -255,6 +255,43 @@ describe("PackageCard", function () {
       expect(card.refs.versionValue.value).toBe("tag:v2.0.0");
     });
 
+    it("reflects the installed branch, not the catalog tag, in the version selector", function () {
+      setPackageStatusSpies({ installed: true, disabled: false, hasSettings: false });
+      spyOn(PackageCard.prototype, "getInstalledMetadata").andReturn({
+        name: "invert-colors",
+        version: "0.5.0",
+        repository: "asiloisad/pulsar-invert-colors",
+        apmInstallSource: {
+          type: "git",
+          origin: "github.com/asiloisad/pulsar-invert-colors",
+          selector: { type: "branch", value: "master" },
+          sha: "a".repeat(40),
+          updatePolicy: "branch",
+        },
+      });
+      card = new PackageCard(
+        {
+          name: "invert-colors",
+          version: "0.5.0",
+          repository: "asiloisad/pulsar-invert-colors",
+          originKey: "github.com/asiloisad/pulsar-invert-colors",
+          status: "ready",
+          selectedRef: { type: "latest", value: "v0.5.0" },
+          resolvedSha: "b".repeat(40),
+          refs: {
+            latestStable: { name: "v0.5.0", sha: "b".repeat(40) },
+            defaultBranch: "master",
+            headSha: "a".repeat(40),
+            tags: [{ name: "v0.5.0", sha: "b".repeat(40) }],
+          },
+        },
+        new SettingsView(),
+        packageManager,
+      );
+      jasmine.attachToDOM(card.element);
+      expect(card.refs.versionValue.value).toBe("branch:master");
+    });
+
     it("blocks a ref whose manifest renamed an already-installed origin", function () {
       setPackageStatusSpies({ installed: false, disabled: false });
       let installed = {
