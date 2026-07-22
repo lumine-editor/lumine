@@ -327,23 +327,36 @@ module.exports = class PackageManager {
         await this.removePackageDir(packagePath);
       }
       this.clearOutdatedCache();
-      if (atom.packages.isBundledPackage(name)) {
-        // Removing an override reveals the bundled package immediately. The
-        // name's disabled preference belongs to the slot and is preserved.
-        // Activation is fire-and-forget: a bundled package that defers activation
-        // (activationCommands/activationHooks) would otherwise hang the uninstall
-        // until its trigger fires (see activateInstalledPackage).
-        atom.packages.loadPackage(name);
-        if (!atom.packages.isPackageDisabled(name)) {
-          atom.packages.activatePackage(name).catch(() => {});
-        }
-      } else {
+      const restoresBundled = atom.packages.isBundledPackage(name);
+      if (!restoresBundled) {
         this.removePackageNameFromDisabledPackages(name);
       }
+
+      // Signal completion as soon as the package is gone from disk. The bundled
+      // restore below is best-effort and runs afterwards, so a slow, deferred, or
+      // failing activation can never hang or fail an uninstall that already
+      // succeeded (and left the UI spinner stuck until a restart).
       if (typeof callback === "function") {
         callback();
       }
-      return this.emitPackageEvent("uninstalled", pack);
+      const result = this.emitPackageEvent("uninstalled", pack);
+
+      if (restoresBundled) {
+        // Reveal the overridden bundled package again. The name's disabled
+        // preference belongs to the slot and is preserved; activation is
+        // fire-and-forget because a package that defers activation only resolves
+        // activatePackage once its trigger fires.
+        try {
+          atom.packages.loadPackage(name);
+          if (!atom.packages.isPackageDisabled(name)) {
+            atom.packages.activatePackage(name).catch(() => {});
+          }
+        } catch {
+          // The bundled package will load on the next restart.
+        }
+      }
+
+      return result;
     } catch (error) {
       error.message = error.message || errorMessage;
       return onError(error);

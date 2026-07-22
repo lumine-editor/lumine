@@ -425,6 +425,36 @@ describe("PackageManager", function () {
       });
     });
 
+    it("still completes the uninstall when restoring the bundled package throws", function () {
+      const packagesDir = fs.realpathSync(
+        fs.mkdtempSync(path.join(os.tmpdir(), "lumine-override-throw-")),
+      );
+      fs.makeTreeSync(path.join(packagesDir, "broken-bundled"));
+      spyOn(packageManager, "getAtomPackagesDirectory").andReturn(packagesDir);
+      spyOn(atom.packages, "isBundledPackage").andReturn(true);
+      spyOn(atom.packages, "isPackageActive").andReturn(false);
+      spyOn(atom.packages, "isPackageLoaded").andReturn(false);
+      spyOn(atom.packages, "isPackageDisabled").andReturn(false);
+      spyOn(atom.packages, "loadPackage").andCallFake(() => {
+        throw new Error("cannot load bundled package");
+      });
+      spyOn(atom.packages, "activatePackage");
+
+      const uninstallCallback = jasmine.createSpy("uninstallCallback");
+      waitsForPromise(() =>
+        packageManager.uninstall({ name: "broken-bundled" }, uninstallCallback),
+      );
+
+      runs(() => {
+        // The on-disk removal succeeded, so the uninstall reports success even
+        // though the best-effort bundled restore threw.
+        expect(uninstallCallback).toHaveBeenCalled();
+        expect(uninstallCallback.mostRecentCall.args[0]).toBeUndefined();
+        expect(atom.packages.activatePackage).not.toHaveBeenCalled();
+        fs.removeSync(packagesDir);
+      });
+    });
+
     it("removes only a user package symlink and preserves its source directory", function () {
       const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lumine-uninstall-")));
       const packagesDir = path.join(root, "packages");
