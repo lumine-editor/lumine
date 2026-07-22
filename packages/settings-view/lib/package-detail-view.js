@@ -428,8 +428,11 @@ export default class PackageDetailView {
 
     const repoUrl = this.packageManager.getRepositoryUrl(this.pack);
     if (repoUrl) {
-      const repoName = URL.parse(repoUrl)?.pathname ?? repoUrl;
-      this.refs.packageRepo.textContent = repoName.substring(1);
+      // getRepositoryUrl may return a full URL (pathname starts with "/") or an
+      // owner/repo shorthand (no leading slash), so strip only a leading slash
+      // rather than the first character.
+      const repoName = (URL.parse(repoUrl)?.pathname ?? repoUrl).replace(/^\//, "");
+      this.refs.packageRepo.textContent = repoName;
       this.refs.packageRepo.style.display = "";
     } else {
       this.refs.packageRepo.style.display = "none";

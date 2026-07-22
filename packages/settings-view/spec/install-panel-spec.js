@@ -510,22 +510,22 @@ describe("InstallPanel", function () {
     );
   });
 
-  it("filters to installed packages with newer catalog versions", function () {
-    spyOn(packageManager, "isPackageInstalled").andCallFake((name) => name !== "not-installed");
-    spyOn(panel, "getInstalledMetadata").andCallFake((name) => ({
-      name,
-      version: name === "updatable" ? "1.0.0" : "2.0.0",
-      repository: `https://github.com/owner/${name}.git`,
-    }));
-    panel.catalogPackages = [
-      { name: "updatable", version: "2.0.0", repository: "owner/updatable" },
-      { name: "current", version: "2.0.0", repository: "owner/current" },
-      { name: "not-installed", version: "2.0.0", repository: "owner/not-installed" },
-    ];
+  it("shows only installed packages that have a newer version on the Updates tab", function () {
+    spyOn(packageManager, "getGitPackageUpdates").andReturn(
+      Promise.resolve([
+        { name: "updatable", repository: "owner/updatable", latestSha: "a".repeat(40) },
+      ]),
+    );
 
     panel.setFilterType("updates");
     expect(panel.refs.filterUpdatesButton).toHaveClass("selected");
-    expect(panel.browsePackageCards.map(({ pack }) => pack.name)).toEqual(["updatable"]);
+    waitsForPromise(() => panel.updatePromise);
+    runs(() => {
+      // Only the installed packages are fetched — no catalog load.
+      expect(catalogClient.loadAll).not.toHaveBeenCalled();
+      expect(packageManager.getGitPackageUpdates).toHaveBeenCalled();
+      expect(panel.browsePackageCards.map(({ pack }) => pack.name)).toEqual(["updatable"]);
+    });
   });
 
   describe("checking for updates", function () {
@@ -552,18 +552,16 @@ describe("InstallPanel", function () {
       expect(panel.checkForUpdates).toHaveBeenCalled();
     });
 
-    it("refreshes the catalogs and shows the Updates filter", function () {
-      catalogClient.loadAll.andReturn(
-        Promise.resolve({
-          schemaVersion: 2,
-          packages: [{ name: "updatable", version: "2.0.0", repository: "owner/updatable" }],
-          errors: [],
-        }),
+    it("opens the Updates tab with the installed packages that have updates", function () {
+      packageManager.getGitPackageUpdates.andReturn(
+        Promise.resolve([
+          { name: "updatable", repository: "owner/updatable", latestSha: "a".repeat(40) },
+        ]),
       );
 
       waitsForPromise(() => panel.checkForUpdates());
       runs(() => {
-        expect(catalogClient.loadAll.mostRecentCall.args[1].refresh).toBe(true);
+        expect(catalogClient.loadAll).not.toHaveBeenCalled();
         expect(panel.refs.filterUpdatesButton).toHaveClass("selected");
         expect(panel.browsePackageCards.map(({ pack }) => pack.name)).toEqual(["updatable"]);
       });
@@ -587,27 +585,18 @@ describe("InstallPanel", function () {
     });
 
     it("ignores installed packages without a receipt update", function () {
-      catalogClient.loadAll.andReturn(
-        Promise.resolve({ schemaVersion: 2, packages: [], errors: [] }),
-      );
-
       waitsForPromise(() => panel.checkForUpdates());
       runs(() => {
-        expect(panel.pulsarUpdatePackages).toEqual([]);
+        expect(panel.updatePackages).toEqual([]);
         expect(panel.browsePackageCards.length).toBe(0);
       });
     });
 
-    it("does not query Pulsar for updates when the toggle is off", function () {
-      atom.config.set("settings-view.includePulsarPackageResults", false);
-      catalogClient.loadAll.andReturn(
-        Promise.resolve({ schemaVersion: 2, packages: [], errors: [] }),
-      );
-
+    it("does not query the Pulsar registry for updates", function () {
       waitsForPromise(() => panel.checkForUpdates());
       runs(() => {
         expect(pulsarClient.getPackage).not.toHaveBeenCalled();
-        expect(panel.pulsarUpdatePackages).toEqual([]);
+        expect(panel.updatePackages).toEqual([]);
       });
     });
   });

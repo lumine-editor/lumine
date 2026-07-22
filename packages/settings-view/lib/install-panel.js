@@ -28,7 +28,7 @@ export default class InstallPanel {
     this.catalogClient = this.packageManager.getCatalogClient();
     this.pulsarClient = this.packageManager.getPulsarClient();
     this.catalogPackages = [];
-    this.pulsarUpdatePackages = [];
+    this.updatePackages = [];
     this.catalogPackageCards = [];
     this.browsePackageCards = [];
     this.catalogFetched = false;
@@ -47,9 +47,6 @@ export default class InstallPanel {
     this.refs.catalogEditor.setPlaceholderText("owner/catalog or index.json URL");
 
     this.disposables.add(atom.tooltips.add(this.refs.addCatalogButton, { title: "Add catalog" }));
-    this.disposables.add(
-      atom.tooltips.add(this.refs.checkUpdatesButton, { title: "Check for Updates" }),
-    );
     this.disposables.add(
       this.packageManager.on("package-install-failed", ({ error }) => {
         this.refs.searchErrors.appendChild(new ErrorView(this.packageManager, error).element);
@@ -295,12 +292,6 @@ export default class InstallPanel {
                   Updates
                 </button>
               </div>
-              <button
-                ref="checkUpdatesButton"
-                className="btn icon icon-squirrel check-updates-button"
-                aria-label="Check for Updates"
-                onclick={this.checkForUpdates.bind(this)}
-              />
             </div>
 
             <div ref="searchErrors" />
@@ -376,9 +367,14 @@ export default class InstallPanel {
     for (const [type, button] of Object.entries(buttons)) {
       button.classList.toggle("selected", type === filterType);
     }
-    // performSearch renders the browse list (no query) or the filtered search
-    // results (query); no separate renderBrowseList call is needed.
-    this.performSearch();
+    if (filterType === "updates") {
+      // The Updates tab fetches only the installed packages, not the catalog.
+      this.updatePromise = this.showUpdates();
+    } else {
+      // performSearch renders the browse list (no query) or the filtered search
+      // results (query); no separate renderBrowseList call is needed.
+      this.performSearch();
+    }
   }
 
   matchesFilter(pack) {
@@ -711,11 +707,24 @@ export default class InstallPanel {
   }
 
   renderBrowseList() {
-    // Pulsar update results (gathered by the Check for Updates action) are
-    // merged into the Updates list, deduplicated against the catalogs by repo.
-    const extra = this.filterType === "updates" ? this.pulsarUpdatePackages : [];
+    // The Updates tab lists only the installed packages that have a newer
+    // version (gathered from their install receipts, not the catalog).
+    if (this.filterType === "updates") {
+      const updates = (this.updatePackages || [])
+        .slice()
+        .sort((left, right) => left.name.localeCompare(right.name));
+      const start = (this.page - 1) * this.pageSize;
+      this.renderCardList(
+        this.refs.browseContainer,
+        this.browsePackageCards,
+        updates.slice(start, start + this.pageSize),
+      );
+      this.updatePagination(updates.length);
+      return;
+    }
+
     const origins = new Set();
-    const packages = [...this.catalogPackages, ...extra]
+    const packages = this.catalogPackages
       .filter((pack) => this.matchesFilter(pack))
       .filter((pack) => {
         const key = packageOrigin(pack);
@@ -1006,41 +1015,44 @@ export default class InstallPanel {
   // Looks for updates to installed packages: refreshes the community catalogs
   // and, independently, asks the Pulsar registry for the latest version of each
   // installed package. Results are shown under the Updates filter.
-  async checkForUpdates() {
-    const button = this.refs.checkUpdatesButton;
-    // A re-entrancy flag rather than button.disabled: disabling the just-clicked
-    // button blurs it, which yanks focus out of the settings panel to <body>.
-    if (this.checkingForUpdates) return;
-    this.checkingForUpdates = true;
-    button.classList.add("is-checking");
-
-    // Clear any active query so the Updates browse list is what's shown.
-    this.refs.searchEditor.setText("");
+  // Public entry point (command / URI): open the Updates tab, which checks the
+  // installed packages for updates.
+  checkForUpdates() {
     this.setFilterType("updates");
+    return this.updatePromise;
+  }
+
+  // Fetches updates for the installed packages only (no catalog fetch) and
+  // renders them under the Updates tab.
+  async showUpdates() {
+    if (this.loadingUpdates) return;
+    this.loadingUpdates = true;
+
+    // The Updates tab is about installed packages, not the catalog search.
+    this.refs.searchEditor.setText("");
+    this.clearSearchResults();
+    this.refs.browseArea.style.display = "";
+    this.refs.catalogProgress.textContent = "Checking installed packages for updates…";
 
     try {
-      if (this.getCatalogSources().length) {
-        this.catalogPromise = this.loadCatalog({ refresh: true });
-        await this.catalogPromise;
-      }
-      await this.loadPulsarUpdates();
+      await this.loadUpdates();
       this.renderBrowseList();
+      const count = (this.updatePackages || []).length;
+      this.refs.catalogProgress.textContent = count
+        ? `${count} update(s) available`
+        : "All installed packages are up to date.";
     } finally {
-      this.checkingForUpdates = false;
-      button.classList.remove("is-checking");
+      this.loadingUpdates = false;
     }
   }
 
-  // Queries the Pulsar registry for the latest version of each installed
-  // package and keeps those whose installed origin matches and has a newer
-  // release. Gated on the "Include Pulsar results" toggle, so the tick fully
-  // controls whether the registry is consulted.
-  async loadPulsarUpdates() {
-    const generation = (this.pulsarUpdateGeneration = (this.pulsarUpdateGeneration || 0) + 1);
-    this.pulsarUpdatePackages = [];
+  // Checks each installed Git package's receipt for a newer version.
+  async loadUpdates() {
+    const generation = (this.updateGeneration = (this.updateGeneration || 0) + 1);
+    this.updatePackages = [];
     const packs = await this.packageManager.getGitPackageUpdates();
-    if (generation !== this.pulsarUpdateGeneration) return;
-    this.pulsarUpdatePackages = packs;
+    if (generation !== this.updateGeneration) return;
+    this.updatePackages = packs;
   }
 
   didClickRestoreDefaults() {

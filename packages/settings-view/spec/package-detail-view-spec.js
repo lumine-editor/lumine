@@ -143,6 +143,24 @@ describe("PackageDetailView", function () {
     }
   });
 
+  it("shows the full owner/repo in the repo link for a shorthand repository", function () {
+    const metadata = {
+      name: "cursor-leader",
+      version: "0.1.0",
+      repository: "asiloisad/pulsar-cursor-leader",
+      owner: "asiloisad",
+      engines: { atom: "*" },
+    };
+    view = new PackageDetailView(
+      { ...metadata, metadata },
+      new SettingsView(),
+      packageManager,
+      SnippetsProvider,
+    );
+
+    expect(view.refs.packageRepo.textContent).toBe("asiloisad/pulsar-cursor-leader");
+  });
+
   it("does not call the atom.io api for package metadata when present", function () {
     atom.packages.loadPackage(path.join(__dirname, "fixtures", "package-with-config"));
     packageManager.client = createClientSpy();
