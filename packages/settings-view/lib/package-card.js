@@ -68,19 +68,26 @@ export default class PackageCard {
     this.loadCachedMetadata();
     this.addBadges();
 
+    this.hasCompatibleVersion = true;
+
+    // The informational card for a bundled package currently overridden by a
+    // community install: greyed out, with a single "Override" indicator and no
+    // Update/Settings/Disable/Uninstall.
+    if (this.pack.isShadowed) {
+      this.setupShadowedCard();
+      return;
+    }
+
     // themes have no status and cannot be dis/enabled
     if (this.type === "theme") {
       this.refs.statusIndicator.remove();
       this.refs.enablementButton.remove();
     }
 
-    // Only strip the install/uninstall buttons for the genuine bundled package.
-    // A community package that merely shares a bundled package's name keeps its
-    // buttons so the conflict state can show a disabled Install with a reason.
-    if (
-      (this.pack.packageKind === "builtin" || atom.packages.isBundledPackage(this.pack.name)) &&
-      !this.installedOriginDiffers()
-    ) {
+    // Only strip the install/uninstall buttons for the genuine bundled instance.
+    // A community package that overrides a bundled name is a real install and
+    // keeps its Settings/Disable/Uninstall buttons.
+    if (this.isBundledInstance()) {
       this.refs.installButtonGroup.remove();
       this.refs.uninstallButton.remove();
     }
@@ -89,8 +96,34 @@ export default class PackageCard {
       this.refs.updateButtonGroup.style.display = "none";
     }
 
-    this.hasCompatibleVersion = true;
     this.updateInterfaceState();
+  }
+
+  // True when this card represents the bundled instance itself (a normally
+  // loaded bundled package or the shadow descriptor), as opposed to a community
+  // package that overrides a bundled name — which is a real install and keeps
+  // its buttons.
+  isBundledInstance() {
+    if (this.pack.packageKind === "builtin") return true;
+    if (this.pack.apmInstallSource) return false;
+    if (this.installedOriginDiffers()) return false;
+    return atom.packages.isBundledPackage(this.pack.name);
+  }
+
+  setupShadowedCard() {
+    this.element.classList.add("is-shadowed");
+    this.refs.updateButtonGroup.remove();
+    this.refs.packageActionButtonGroup.remove();
+    this.refs.installButton.remove();
+    this.refs.replaceButton.style.display = "";
+    this.refs.replaceButton.textContent = "Override";
+    this.refs.replaceButton.disabled = true;
+    this.refs.replaceButton.classList.add("disabled");
+    this.disposables.add(
+      atom.tooltips.add(this.refs.installButtonGroup, {
+        title: `The bundled “${this.pack.name}” is overridden by an installed community package of the same name. Uninstall it to restore the bundled package.`,
+      }),
+    );
   }
 
   render() {
@@ -242,6 +275,7 @@ export default class PackageCard {
   // (which already carry refs) and installed Git packages (which lazily list
   // their tags on demand). Bundled/local packages keep a plain version label.
   canSelectVersion() {
+    if (this.pack.isShadowed) return false;
     if (this.pack.refs) return true;
     return !!(this.pack.apmInstallSource && this.pack.apmInstallSource.type === "git");
   }
@@ -746,6 +780,8 @@ export default class PackageCard {
   }
 
   updateInterfaceState() {
+    // The shadow card is static; nothing to reconcile.
+    if (this.pack.isShadowed) return;
     this.applyVersionDisplay();
 
     // The Git ref indicator describes what is installed, so only show it while
@@ -1122,6 +1158,7 @@ export default class PackageCard {
   }
 
   displayAvailableUpdate(newVersion) {
+    if (this.pack.isShadowed) return;
     this.newVersion = newVersion;
     this.updateInterfaceState();
   }

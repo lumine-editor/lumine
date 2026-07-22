@@ -513,6 +513,8 @@ export default class PackageDetailView {
     const shaChanged = !!sha && sha !== meta.resolvedSha;
     if (pack.selectedRef) meta.selectedRef = pack.selectedRef;
     if (pack.originKey) meta.originKey = pack.originKey;
+    else if (!meta.originKey && meta.apmInstallSource)
+      meta.originKey = meta.apmInstallSource.origin;
     if (pack.version != null) meta.version = pack.version;
     if (sha) meta.resolvedSha = sha;
     if (pack.name && pack.name !== this.pack.name) {
@@ -525,6 +527,25 @@ export default class PackageDetailView {
       meta.readmeSource = undefined;
       this.readmeRequested = false;
       this.renderReadme();
+    }
+    // Settings, keymaps, grammars, and snippets belong to the installed version.
+    // While a different version is selected, show only its README.
+    const installedSha = this.installedSha();
+    const previewingOther =
+      !!sha && !!installedSha && sha.toLowerCase() !== installedSha.toLowerCase();
+    this.setConfigSectionsVisible(!previewingOther);
+  }
+
+  installedSha() {
+    const install = this.pack && this.pack.metadata && this.pack.metadata.apmInstallSource;
+    return install && install.sha ? install.sha : null;
+  }
+
+  setConfigSectionsVisible(visible) {
+    const readmeElement = this.readmeView && this.readmeView.element;
+    for (const child of Array.from(this.refs.sections.children)) {
+      if (child === readmeElement) continue;
+      child.style.display = visible ? "" : "none";
     }
   }
 

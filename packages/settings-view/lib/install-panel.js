@@ -153,6 +153,7 @@ export default class InstallPanel {
     this.clearPackageCards(this.catalogPackageCards);
     this.clearPackageCards(this.browsePackageCards);
     if (this.currentGitPackageCard) this.currentGitPackageCard.destroy();
+    if (this.catalogProgressTooltip) this.catalogProgressTooltip.dispose();
     this.disposables.dispose();
     return etch.destroy(this);
   }
@@ -594,6 +595,7 @@ export default class InstallPanel {
         renderTimer = null;
       }
       this.catalogPackages = result.packages;
+      this.updateCatalogProgressTooltip(result.packages);
       this.page = Math.min(
         this.page,
         Math.max(1, Math.ceil(this.catalogPackages.length / this.pageSize)),
@@ -625,6 +627,36 @@ export default class InstallPanel {
         this.refs.cancelFetchButton.disabled = false;
       }
     }
+  }
+
+  // Lists the repositories that failed to hydrate (with their error messages) in
+  // a tooltip on the progress line, so the "N error(s)" count is explorable.
+  updateCatalogProgressTooltip(packages) {
+    if (this.catalogProgressTooltip) {
+      this.catalogProgressTooltip.dispose();
+      this.catalogProgressTooltip = null;
+    }
+    const failed = (packages || []).filter(
+      (pack) => (pack.status === "error" || pack.status === "stale") && pack.error,
+    );
+    this.refs.catalogProgress.classList.toggle("has-errors", failed.length > 0);
+    if (!failed.length) return;
+    const escape = (text) =>
+      String(text).replace(
+        /[&<>"']/g,
+        (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char],
+      );
+    const title = failed
+      .map(
+        (pack) =>
+          `<strong>${escape(pack.originKey || pack.name || "")}</strong>: ${escape(pack.error)}`,
+      )
+      .join("<br>");
+    this.catalogProgressTooltip = atom.tooltips.add(this.refs.catalogProgress, {
+      html: true,
+      class: "catalog-progress-tooltip",
+      title,
+    });
   }
 
   renderBrowseList() {

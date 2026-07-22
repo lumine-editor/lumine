@@ -652,6 +652,57 @@ describe("PackageCard", function () {
       expect(card.installNoteTooltip).toBeTruthy();
     });
 
+    it("keeps the Uninstall button on a community package overriding a bundled name", function () {
+      setPackageStatusSpies({ installed: true, disabled: false, hasSettings: false });
+      spyOn(atom.packages, "isBundledPackage").andCallFake((name) => name === "fuzzy-explorer");
+      spyOn(PackageCard.prototype, "getInstalledMetadata").andReturn(null);
+      card = new PackageCard(
+        {
+          name: "fuzzy-explorer",
+          version: "0.3.4",
+          repository: "asiloisad/pulsar-fuzzy-explorer",
+          path: "/tmp/.lumine/packages/fuzzy-explorer",
+          apmInstallSource: {
+            type: "git",
+            origin: "github.com/asiloisad/pulsar-fuzzy-explorer",
+            sha: "a".repeat(40),
+            selector: { type: "tag", value: "v0.3.4" },
+          },
+        },
+        new SettingsView(),
+        packageManager,
+      );
+      jasmine.attachToDOM(card.element);
+      expect(card.refs.uninstallButton).toBeVisible();
+      expect(card.element).not.toHaveClass("is-shadowed");
+    });
+
+    it("renders an overridden bundled package as a greyed-out Override card", function () {
+      setPackageStatusSpies({ installed: true, disabled: false, hasSettings: true });
+      spyOn(atom.packages, "isBundledPackage").andReturn(true);
+      card = new PackageCard(
+        {
+          name: "fuzzy-explorer",
+          version: "0.3.4",
+          repository: "lumine-code/lumine",
+          packageKind: "builtin",
+          isShadowed: true,
+        },
+        new SettingsView(),
+        packageManager,
+      );
+      jasmine.attachToDOM(card.element);
+      expect(card.element).toHaveClass("is-shadowed");
+      expect(card.refs.replaceButton).toBeVisible();
+      expect(card.refs.replaceButton.textContent).toBe("Override");
+      expect(card.refs.replaceButton.disabled).toBe(true);
+      expect(card.refs.installButton).not.toBeVisible();
+      expect(card.refs.uninstallButton).not.toBeVisible();
+      // A reported update must not turn the informational card into an updater.
+      card.displayAvailableUpdate("1.0.0");
+      expect(card.refs.updateButton).not.toBeVisible();
+    });
+
     it("blocks Override until the conflicting community card validates", function () {
       setPackageStatusSpies({ installed: true, disabled: false, hasSettings: false });
       spyOn(PackageCard.prototype, "getInstalledMetadata").andReturn({

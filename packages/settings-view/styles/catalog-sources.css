@@ -100,11 +100,27 @@
   vertical-align: baseline;
 }
 
+/* The bundled card that is currently overridden by a community install is
+   informational only: greyed out with a single, disabled "Override" marker. */
+.settings-view .package-card.is-shadowed {
+  opacity: 0.55;
+}
+
+.settings-view .package-card.is-shadowed .replace-button.disabled {
+  cursor: default;
+}
+
 /* The repository hover tooltip renders at the body level, so it is not scoped
    under .settings-view. Left-align its content (Bootstrap centers by default). */
-.package-catalog-tooltip .tooltip-inner {
+.package-catalog-tooltip .tooltip-inner,
+.catalog-progress-tooltip .tooltip-inner {
   text-align: left;
   max-width: 32em;
+}
+
+/* Signal that the progress line reveals per-repository errors on hover. */
+.settings-view .catalog-progress.has-errors {
+  cursor: help;
 }
 
 .settings-view .package-catalog-status {
