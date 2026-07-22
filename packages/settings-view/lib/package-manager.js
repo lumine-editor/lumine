@@ -330,9 +330,12 @@ module.exports = class PackageManager {
       if (atom.packages.isBundledPackage(name)) {
         // Removing an override reveals the bundled package immediately. The
         // name's disabled preference belongs to the slot and is preserved.
+        // Activation is fire-and-forget: a bundled package that defers activation
+        // (activationCommands/activationHooks) would otherwise hang the uninstall
+        // until its trigger fires (see activateInstalledPackage).
         atom.packages.loadPackage(name);
         if (!atom.packages.isPackageDisabled(name)) {
-          await atom.packages.activatePackage(name);
+          atom.packages.activatePackage(name).catch(() => {});
         }
       } else {
         this.removePackageNameFromDisabledPackages(name);

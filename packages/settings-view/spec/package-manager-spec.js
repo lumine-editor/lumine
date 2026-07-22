@@ -395,6 +395,36 @@ describe("PackageManager", function () {
       });
     });
 
+    it("does not wait for the restored bundled package to finish activating", function () {
+      // A bundled package that defers activation never resolves activatePackage
+      // until its trigger fires; awaiting it would hang the uninstall.
+      const packagesDir = fs.realpathSync(
+        fs.mkdtempSync(path.join(os.tmpdir(), "lumine-override-activate-")),
+      );
+      fs.makeTreeSync(path.join(packagesDir, "deferred-bundled"));
+      spyOn(packageManager, "getAtomPackagesDirectory").andReturn(packagesDir);
+      spyOn(atom.packages, "isBundledPackage").andReturn(true);
+      spyOn(atom.packages, "isPackageActive").andReturn(false);
+      spyOn(atom.packages, "isPackageLoaded").andReturn(false);
+      spyOn(atom.packages, "isPackageDisabled").andReturn(false);
+      spyOn(atom.packages, "loadPackage");
+      // Never resolves — mimics a package that defers activation.
+      spyOn(atom.packages, "activatePackage").andReturn(new Promise(() => {}));
+
+      const uninstallCallback = jasmine.createSpy("uninstallCallback");
+      waitsForPromise(() =>
+        packageManager.uninstall({ name: "deferred-bundled" }, uninstallCallback),
+      );
+
+      runs(() => {
+        expect(atom.packages.activatePackage).toHaveBeenCalledWith("deferred-bundled");
+        // The uninstall completes even though activation never resolves.
+        expect(uninstallCallback).toHaveBeenCalled();
+        expect(uninstallCallback.mostRecentCall.args[0]).toBeUndefined();
+        fs.removeSync(packagesDir);
+      });
+    });
+
     it("removes only a user package symlink and preserves its source directory", function () {
       const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lumine-uninstall-")));
       const packagesDir = path.join(root, "packages");
