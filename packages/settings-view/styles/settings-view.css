@@ -638,11 +638,6 @@
 
     .package-chapter-tabs {
       margin-left: auto; /* push the chapter tabs to the right side */
-
-      .btn.selected {
-        color: var(--text-color-selected);
-        background-color: var(--background-color-selected);
-      }
     }
 
     .package-license {
