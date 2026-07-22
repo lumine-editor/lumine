@@ -170,6 +170,7 @@ export default class PackageDetailView {
         this.packageManager,
         {
           onSettingsView: true,
+          isShadowed: this.pack.isShadowed,
           onPackUpdated: (updatedPack) => this.applySelectedRef(updatedPack),
         },
       );
@@ -414,6 +415,7 @@ export default class PackageDetailView {
             metadata={this.pack.metadata}
             options={{
               onSettingsView: true,
+              isShadowed: this.pack.isShadowed,
               onPackUpdated: (updatedPack) => this.applySelectedRef(updatedPack),
             }}
           />

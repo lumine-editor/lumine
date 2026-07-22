@@ -48,6 +48,10 @@ export default class PackageCard {
     this.name = this.pack.name;
     this.onSettingsView = options.onSettingsView;
     this.onPackUpdated = options.onPackUpdated;
+    // The shadow flag arrives on the pack for a list card, or via options for the
+    // detail view's embedded card — whose metadata is the shared bundled object
+    // and must not be mutated.
+    this.isShadowed = !!(this.pack.isShadowed || options.isShadowed);
 
     if (this.pack.latestVersion !== this.pack.version) {
       this.newVersion = this.pack.latestVersion;
@@ -73,7 +77,7 @@ export default class PackageCard {
     // The informational card for a bundled package currently overridden by a
     // community install: greyed out, with a single "Override" indicator and no
     // Update/Settings/Disable/Uninstall.
-    if (this.pack.isShadowed) {
+    if (this.isShadowed) {
       this.setupShadowedCard();
       return;
     }
@@ -279,7 +283,7 @@ export default class PackageCard {
   // (which already carry refs) and installed Git packages (which lazily list
   // their tags on demand). Bundled/local packages keep a plain version label.
   canSelectVersion() {
-    if (this.pack.isShadowed) return false;
+    if (this.isShadowed) return false;
     if (this.pack.refs) return true;
     return !!(this.pack.apmInstallSource && this.pack.apmInstallSource.type === "git");
   }
@@ -863,7 +867,7 @@ export default class PackageCard {
 
   updateInterfaceState() {
     // The shadow card is static; nothing to reconcile.
-    if (this.pack.isShadowed) return;
+    if (this.isShadowed) return;
     this.applyVersionDisplay();
 
     this.updateSettingsState();
@@ -1239,7 +1243,7 @@ export default class PackageCard {
   }
 
   displayAvailableUpdate(newVersion) {
-    if (this.pack.isShadowed) return;
+    if (this.isShadowed) return;
     this.newVersion = newVersion;
     this.updateInterfaceState();
   }

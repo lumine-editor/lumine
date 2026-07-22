@@ -232,6 +232,28 @@ describe("PackageDetailView", function () {
     expect(view.activeChapter).toBe("readme");
   });
 
+  it("keeps the overridden bundled card shadowed in its detail view", function () {
+    const metadata = {
+      name: "shadowed-pkg",
+      version: "1.0.0",
+      description: "A bundled package overridden by a community install.",
+      repository: "https://github.com/lumine-code/lumine",
+    };
+    view = new PackageDetailView(
+      { ...metadata, name: "shadowed-pkg", metadata, isShadowed: true, packageKind: "builtin" },
+      new SettingsView(),
+      packageManager,
+      SnippetsProvider,
+    );
+
+    // The embedded card must reflect the shadow state even though its metadata
+    // (the shared bundled object) doesn't carry the flag — it comes via options.
+    expect(view.packageCard.isShadowed).toBe(true);
+    expect(view.packageCard.element).toHaveClass("is-shadowed");
+    // No Override/Replace action on a shadowed card.
+    expect(view.packageCard.element.querySelector(".replace-button")).toBeNull();
+  });
+
   it("shows the full owner/repo in the repo link for a shorthand repository", function () {
     const metadata = {
       name: "cursor-leader",
