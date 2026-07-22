@@ -47,7 +47,7 @@ if (args.resourcePath) {
   resourcePath = args.resourcePath;
   devResourcePath = resourcePath;
 } else {
-  const stableResourcePath = path.dirname(path.dirname(__dirname));
+  const stableResourcePath = path.dirname(__dirname);
   const defaultRepositoryPath = path.join(
     // Setting the path for the app
     app.getPath("home"),
