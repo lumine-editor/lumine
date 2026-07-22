@@ -127,15 +127,15 @@
       text-align: center;
 
       &.icon-cloud-download {
-        color: #428bca;
+        color: var(--text-color-info);
       }
 
       &.icon-check {
-        color: #6cc644;
+        color: var(--text-color-success);
       }
 
       &.icon-alert {
-        color: #bd2c00;
+        color: var(--text-color-error);
       }
     }
 
@@ -212,12 +212,12 @@
         padding: 3px 6px;
 
         &:hover {
-          background-color: #eaeaea;
+          background-color: var(--background-color-highlight);
         }
       }
 
       .value {
-        color: #999;
+        color: var(--text-color-subtle);
       }
     }
 
