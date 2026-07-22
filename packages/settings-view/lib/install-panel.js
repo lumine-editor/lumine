@@ -376,7 +376,8 @@ export default class InstallPanel {
     for (const [type, button] of Object.entries(buttons)) {
       button.classList.toggle("selected", type === filterType);
     }
-    this.renderBrowseList();
+    // performSearch renders the browse list (no query) or the filtered search
+    // results (query); no separate renderBrowseList call is needed.
     this.performSearch();
   }
 
@@ -675,10 +676,41 @@ export default class InstallPanel {
     });
   }
 
-  renderBrowseList() {
-    this.clearPackageCards(this.browsePackageCards);
-    this.refs.browseContainer.innerHTML = "";
+  // Renders `packs` into `container`, reusing any existing card whose pack
+  // object is unchanged (identity). Filter and page switches keep the same pack
+  // objects, so no card is rebuilt; a fetch replaces the objects it re-hydrates,
+  // so only those cards rebuild. This keeps switching "All"/"Packages" and
+  // paging cheap instead of destroying and recreating up to 50 cards each time.
+  renderCardList(container, cards, packs) {
+    const pool = new Map();
+    for (const card of cards) {
+      const key = packageOrigin(card.pack) || card.pack.name;
+      if (!pool.has(key)) pool.set(key, card);
+    }
+    const next = [];
+    const reused = new Set();
+    for (const pack of packs) {
+      const key = packageOrigin(pack) || pack.name;
+      const pooled = pool.get(key);
+      if (pooled && pooled.pack === pack && !reused.has(pooled)) {
+        reused.add(pooled);
+        next.push(pooled);
+      } else {
+        next.push(this.getPackageCardView(pack));
+      }
+    }
+    for (const card of cards) {
+      if (!reused.has(card)) card.destroy();
+    }
+    container.innerHTML = "";
+    for (const card of next) {
+      this.addPackageCardView(container, card);
+    }
+    cards.length = 0;
+    cards.push(...next);
+  }
 
+  renderBrowseList() {
     // Pulsar update results (gathered by the Check for Updates action) are
     // merged into the Updates list, deduplicated against the catalogs by repo.
     const extra = this.filterType === "updates" ? this.pulsarUpdatePackages : [];
@@ -697,11 +729,11 @@ export default class InstallPanel {
           packageOrigin(left).localeCompare(packageOrigin(right)),
       );
     const start = (this.page - 1) * this.pageSize;
-    for (const pack of packages.slice(start, start + this.pageSize)) {
-      const card = this.getPackageCardView(pack);
-      this.browsePackageCards.push(card);
-      this.addPackageCardView(this.refs.browseContainer, card);
-    }
+    this.renderCardList(
+      this.refs.browseContainer,
+      this.browsePackageCards,
+      packages.slice(start, start + this.pageSize),
+    );
     this.updatePagination(packages.length);
   }
 
@@ -796,14 +828,12 @@ export default class InstallPanel {
   }
 
   renderSearchList(packages) {
-    this.clearPackageCards(this.catalogPackageCards);
-    this.refs.resultsContainer.innerHTML = "";
     const start = (this.page - 1) * this.pageSize;
-    for (const pack of packages.slice(start, start + this.pageSize)) {
-      const card = this.getPackageCardView(pack);
-      this.catalogPackageCards.push(card);
-      this.addPackageCardView(this.refs.resultsContainer, card);
-    }
+    this.renderCardList(
+      this.refs.resultsContainer,
+      this.catalogPackageCards,
+      packages.slice(start, start + this.pageSize),
+    );
     this.updatePagination(packages.length);
   }
 

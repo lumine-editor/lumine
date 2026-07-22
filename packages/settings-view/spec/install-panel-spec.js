@@ -285,6 +285,40 @@ describe("InstallPanel", function () {
     );
   });
 
+  it("reuses cards across a filter switch instead of rebuilding them", function () {
+    panel.catalogPackages = [
+      { name: "pkg-a", repository: "owner/pkg-a", installSource: "owner/pkg-a" },
+      {
+        name: "theme-b",
+        repository: "owner/theme-b",
+        installSource: "owner/theme-b",
+        theme: "syntax",
+      },
+      { name: "pkg-c", repository: "owner/pkg-c", installSource: "owner/pkg-c" },
+    ];
+
+    panel.filterType = "all";
+    panel.renderBrowseList();
+    const cardByName = {};
+    for (const card of panel.browsePackageCards) cardByName[card.pack.name] = card;
+    expect(Object.keys(cardByName).sort()).toEqual(["pkg-a", "pkg-c", "theme-b"]);
+
+    // Switching to Packages drops the theme card but reuses the exact same card
+    // instances for the packages that remain.
+    panel.filterType = "packages";
+    panel.renderBrowseList();
+    expect(panel.browsePackageCards.map((card) => card.pack.name).sort()).toEqual([
+      "pkg-a",
+      "pkg-c",
+    ]);
+    expect(panel.browsePackageCards.find((card) => card.pack.name === "pkg-a")).toBe(
+      cardByName["pkg-a"],
+    );
+    expect(panel.browsePackageCards.find((card) => card.pack.name === "pkg-c")).toBe(
+      cardByName["pkg-c"],
+    );
+  });
+
   it("searches all hydrated records but renders at most 50 cards per page", function () {
     panel.catalogPackages = Array.from({ length: 1000 }, (_value, index) => ({
       name: `package-${String(index).padStart(4, "0")}`,
