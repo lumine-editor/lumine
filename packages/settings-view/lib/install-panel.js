@@ -1053,6 +1053,32 @@ export default class InstallPanel {
     const packs = await this.packageManager.getGitPackageUpdates();
     if (generation !== this.updateGeneration) return;
     this.updatePackages = packs;
+    // Persist the freshly-fetched update data into the cache (and the in-memory
+    // catalog) so browse cards reflect it without a full catalog fetch.
+    this.catalogClient.mergeInstalledUpdates(packs);
+    this.mergeUpdatesIntoCatalog(packs);
+  }
+
+  mergeUpdatesIntoCatalog(packs) {
+    if (!packs.length || !this.catalogPackages.length) return;
+    const byOrigin = new Map();
+    for (const pack of packs) {
+      const key = packageOrigin(pack);
+      if (key) byOrigin.set(key, pack);
+    }
+    this.catalogPackages = this.catalogPackages.map((pack) => {
+      const update = byOrigin.get(packageOrigin(pack));
+      if (!update) return pack;
+      return {
+        ...pack,
+        latestSha: update.latestSha,
+        latestVersion: update.latestVersion,
+        resolvedRef: update.resolvedRef,
+        suspiciousTagMove: update.suspiciousTagMove,
+        originWarning: update.originWarning,
+        renamedPackage: update.renamedPackage,
+      };
+    });
   }
 
   didClickRestoreDefaults() {

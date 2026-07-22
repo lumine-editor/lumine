@@ -27,6 +27,7 @@ describe("InstallPanel", function () {
         }),
       ),
       cancel: jasmine.createSpy("cancel"),
+      mergeInstalledUpdates: jasmine.createSpy("mergeInstalledUpdates"),
       hydrateSource: jasmine.createSpy("hydrateSource").andCallFake((source) =>
         Promise.resolve({
           name: source.split("/").pop(),

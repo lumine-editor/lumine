@@ -94,6 +94,44 @@ describe("CommunityPackageCatalogClient", function () {
     expect(() => client.validate(["owner/package#abcdef1"])).toThrow();
   });
 
+  it("merges installed-package update results into the cached entries", function () {
+    const storage = createStorage();
+    storage.setItem(
+      "settings-view:community-package-catalog-v2",
+      JSON.stringify({
+        schemaVersion: 2,
+        lastFetch: 1,
+        catalogSources: ["https://catalog.test/index.json"],
+        manifests: {},
+        readmes: {},
+        packages: {
+          "github.com/owner/pkg": {
+            originKey: "github.com/owner/pkg",
+            name: "pkg",
+            version: "1.0.0",
+          },
+        },
+      }),
+    );
+    const client = new CommunityPackageCatalogClient({ storage });
+
+    client.mergeInstalledUpdates([
+      {
+        apmInstallSource: { origin: "github.com/owner/pkg" },
+        latestSha: "a".repeat(40),
+        latestVersion: "1.1.0",
+      },
+      { apmInstallSource: { origin: "github.com/owner/absent" }, latestSha: "b".repeat(40) },
+    ]);
+
+    const cache = JSON.parse(storage.getItem("settings-view:community-package-catalog-v2"));
+    expect(cache.packages["github.com/owner/pkg"].latestSha).toBe("a".repeat(40));
+    expect(cache.packages["github.com/owner/pkg"].latestVersion).toBe("1.1.0");
+    // Existing catalog fields are preserved, and unknown origins are ignored.
+    expect(cache.packages["github.com/owner/pkg"].name).toBe("pkg");
+    expect(cache.packages["github.com/owner/absent"]).toBeUndefined();
+  });
+
   it("blocks unsafe automatic repository transports and local targets", function () {
     const client = new CommunityPackageCatalogClient({ storage: createStorage() });
     expect(() => client.validate(["git@github.com:owner/package.git"])).toThrow();

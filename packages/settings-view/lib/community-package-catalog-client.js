@@ -917,6 +917,32 @@ module.exports = class CommunityPackageCatalogClient {
     if (manifests) cache.manifests = manifests;
     this.writeCache(cache);
   }
+
+  // Merges the results of an installed-package update check into the cached
+  // catalog entries (matched by origin) so browse cards reflect the newer data
+  // without a full catalog fetch. Writes only when something actually changed.
+  mergeInstalledUpdates(packs) {
+    const cache = this.readCache();
+    if (!cache || !cache.packages) return;
+    let changed = false;
+    for (const pack of packs || []) {
+      const originKey =
+        pack.originKey || (pack.apmInstallSource && pack.apmInstallSource.origin) || null;
+      const existing = originKey && cache.packages[originKey];
+      if (!existing) continue;
+      cache.packages[originKey] = {
+        ...existing,
+        latestSha: pack.latestSha,
+        latestVersion: pack.latestVersion,
+        resolvedRef: pack.resolvedRef,
+        suspiciousTagMove: pack.suspiciousTagMove,
+        originWarning: pack.originWarning,
+        renamedPackage: pack.renamedPackage,
+      };
+      changed = true;
+    }
+    if (changed) this.writeCache(cache);
+  }
 };
 
 module.exports.CACHE_SCHEMA_VERSION = CACHE_SCHEMA_VERSION;

@@ -112,15 +112,18 @@ export default class PackageCard {
 
   setupShadowedCard() {
     this.element.classList.add("is-shadowed");
+    // Informational only: keep the normal Settings + Disable layout (greyed via
+    // .is-shadowed), but no install/update/override and no uninstall — a bundled
+    // package can't be removed. The buttons are inert while it is overridden.
     this.refs.updateButtonGroup.remove();
-    this.refs.packageActionButtonGroup.remove();
-    this.refs.installButton.remove();
-    this.refs.replaceButton.style.display = "";
-    this.refs.replaceButton.textContent = "Override";
-    this.refs.replaceButton.disabled = true;
-    this.refs.replaceButton.classList.add("disabled");
+    this.refs.installButtonGroup.remove();
+    this.refs.uninstallButton.remove();
+    this.refs.statusIndicator.remove();
+    this.refs.settingsButton.disabled = true;
+    this.refs.enablementButton.disabled = true;
+    if (!this.hasSettings()) this.refs.settingsButton.style.display = "none";
     this.disposables.add(
-      atom.tooltips.add(this.refs.installButtonGroup, {
+      atom.tooltips.add(this.refs.packageActionButtonGroup, {
         title: `The bundled “${this.pack.name}” is overridden by an installed community package of the same name. Uninstall it to restore the bundled package.`,
       }),
     );

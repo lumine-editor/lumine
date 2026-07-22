@@ -677,7 +677,7 @@ describe("PackageCard", function () {
       expect(card.element).not.toHaveClass("is-shadowed");
     });
 
-    it("renders an overridden bundled package as a greyed-out Override card", function () {
+    it("renders an overridden bundled package as a greyed-out informational card", function () {
       setPackageStatusSpies({ installed: true, disabled: false, hasSettings: true });
       spyOn(atom.packages, "isBundledPackage").andReturn(true);
       card = new PackageCard(
@@ -693,9 +693,11 @@ describe("PackageCard", function () {
       );
       jasmine.attachToDOM(card.element);
       expect(card.element).toHaveClass("is-shadowed");
-      expect(card.refs.replaceButton).toBeVisible();
-      expect(card.refs.replaceButton.textContent).toBe("Override");
-      expect(card.refs.replaceButton.disabled).toBe(true);
+      // Settings + Disable are shown but inert; no Install/Update/Uninstall/Override.
+      expect(card.refs.settingsButton).toBeVisible();
+      expect(card.refs.settingsButton.disabled).toBe(true);
+      expect(card.refs.enablementButton).toBeVisible();
+      expect(card.refs.enablementButton.disabled).toBe(true);
       expect(card.refs.installButton).not.toBeVisible();
       expect(card.refs.uninstallButton).not.toBeVisible();
       // A reported update must not turn the informational card into an updater.
