@@ -131,6 +131,82 @@ describe("CommunityPackageCatalogClient", function () {
     );
   });
 
+  it("clears an earlier origin mismatch once a corrected release is published", function () {
+    const catalogUrl = "https://catalog.test/sources.json";
+    // v1.0.0 ships a manifest whose repository points at the wrong origin; a
+    // later v1.1.0 corrects it. Manifests are keyed by SHA, so the corrected
+    // release is fetched fresh instead of reusing the rejected manifest.
+    let tags = [`${SHA_1}\trefs/tags/v1.0.0`];
+    const packageManager = {
+      getGitCommand: () => "git",
+      runProcess: jasmine.createSpy("runProcess").andCallFake((_command, args) => {
+        if (args[0] !== "ls-remote") return Promise.resolve({ stdout: "" });
+        return Promise.resolve({
+          stdout: ["ref: refs/heads/main\tHEAD", `${SHA_1}\tHEAD`, ...tags].join("\n"),
+        });
+      }),
+    };
+    const fetchImpl = jasmine.createSpy("fetchImpl").andCallFake((url) => {
+      if (url === catalogUrl) return Promise.resolve(textResponse(200, ["owner/package"]));
+      if (url.includes(`/${SHA_1}/package.json`)) {
+        return Promise.resolve(
+          textResponse(200, {
+            name: "sample-package",
+            version: "1.0.0",
+            repository: "https://github.com/someone-else/package.git",
+            engines: { atom: "*" },
+          }),
+        );
+      }
+      if (url.includes(`/${SHA_2}/package.json`)) {
+        return Promise.resolve(
+          textResponse(200, {
+            name: "sample-package",
+            version: "1.1.0",
+            repository: "https://github.com/owner/package.git",
+            engines: { atom: "*" },
+          }),
+        );
+      }
+      return Promise.resolve(textResponse(404, "not found"));
+    });
+    const client = new CommunityPackageCatalogClient({
+      fetchImpl,
+      packageManager,
+      storage: createStorage(),
+      atomVersion: () => "1.132.1",
+    });
+
+    waitsForPromise(() =>
+      client
+        .loadAll([catalogUrl], { refresh: true })
+        .then((catalog) => {
+          // The mismatched manifest fails strict origin validation.
+          expect(catalog.packages[0]).toEqual(
+            jasmine.objectContaining({
+              originKey: "github.com/owner/package",
+              status: "error",
+              unverifiedName: true,
+            }),
+          );
+          // Upstream corrects the repository field and publishes a new stable tag.
+          tags = [`${SHA_1}\trefs/tags/v1.0.0`, `${SHA_2}\trefs/tags/v1.1.0`];
+          return client.loadAll([catalogUrl], { refresh: true });
+        })
+        .then((catalog) => {
+          expect(catalog.packages[0]).toEqual(
+            jasmine.objectContaining({
+              name: "sample-package",
+              originKey: "github.com/owner/package",
+              resolvedSha: SHA_2,
+              selectedRef: { type: "latest", value: "v1.1.0" },
+              status: "ready",
+            }),
+          );
+        }),
+    );
+  });
+
   it("inspects an installed update at its exact SHA through Git", function () {
     const storage = createStorage();
     const client = new CommunityPackageCatalogClient({

@@ -245,4 +245,59 @@ describe("PackageInstallationService", function () {
       ),
     );
   });
+
+  it("reloads the previous package with its receipt intact after a failed update rolls back", function () {
+    // An update reinstalls the same origin at a new SHA. If the swap fails after
+    // the active instance was unloaded, the rollback must both restore the old
+    // directory (and its receipt) and reload the instance it unloaded.
+    const target = path.join(root, "sample-package");
+    fs.mkdirSync(target);
+    fs.writeFileSync(
+      path.join(target, "package.json"),
+      JSON.stringify({
+        name: "sample-package",
+        version: "0.9.0",
+        repository: "owner/repo",
+        engines: { atom: "*" },
+        apmInstallSource: {
+          type: "git",
+          origin: "github.com/owner/repo",
+          sha: "b".repeat(40),
+        },
+      }),
+    );
+    fs.writeFileSync(path.join(target, "old-marker"), "old");
+
+    spyOn(service, "beforeSwap").andCallThrough();
+    spyOn(service, "afterSwap").andCallThrough();
+    spyOn(service, "afterRollback").andCallThrough();
+
+    const originalRename = fs.promises.rename;
+    let renameCalls = 0;
+    spyOn(fs.promises, "rename").andCallFake((from, to) => {
+      renameCalls++;
+      if (renameCalls === 2) return Promise.reject(new Error("swap failed"));
+      return originalRename(from, to);
+    });
+
+    waitsForPromise(() =>
+      service.install(pack()).then(
+        () => Promise.reject(new Error("expected rejection")),
+        (error) => {
+          expect(error.message).toContain("swap failed");
+          // The active instance was unloaded, so rollback must reload it and
+          // must not run the success path.
+          expect(service.beforeSwap).toHaveBeenCalledWith("sample-package");
+          expect(service.afterRollback).toHaveBeenCalled();
+          expect(service.afterRollback.argsForCall[0][0]).toBe("sample-package");
+          expect(service.afterSwap).not.toHaveBeenCalled();
+          // The previous directory and its receipt are restored unchanged.
+          expect(fs.readFileSync(path.join(target, "old-marker"), "utf8")).toBe("old");
+          const restored = JSON.parse(fs.readFileSync(path.join(target, "package.json")));
+          expect(restored.version).toBe("0.9.0");
+          expect(restored.apmInstallSource.sha).toBe("b".repeat(40));
+        },
+      ),
+    );
+  });
 });
