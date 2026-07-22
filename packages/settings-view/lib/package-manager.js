@@ -383,10 +383,13 @@ module.exports = class PackageManager {
       const repoName = repoUrl.split(":")[1];
       repoUrl = `https://github.com/${repoName}`;
     }
-    return repoUrl
+    const url = repoUrl
       .replace(/\.git$/, "")
       .replace(/\/+$/, "")
       .replace(/^git\+/, "");
+    // A bare owner/repo shorthand must become a full GitHub URL, otherwise
+    // opening it externally is treated as a file path (opens Explorer).
+    return /^[\w.-]+\/[\w.-]+$/.test(url) ? `https://github.com/${url}` : url;
   }
 
   getRepositoryBugUri({ metadata }) {

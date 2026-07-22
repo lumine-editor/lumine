@@ -304,6 +304,27 @@ describe("PackageDetailView", function () {
     );
   });
 
+  it("opens the full GitHub URL for a shorthand repository, not a file path", function () {
+    const metadata = {
+      name: "cursor-leader",
+      version: "0.1.0",
+      repository: "asiloisad/pulsar-cursor-leader",
+      owner: "asiloisad",
+      engines: { atom: "*" },
+    };
+    view = new PackageDetailView(
+      { ...metadata, metadata },
+      new SettingsView(),
+      packageManager,
+      SnippetsProvider,
+    );
+    spyOn(atom, "openExternal");
+    view.refs.packageRepo.click();
+    expect(atom.openExternal).toHaveBeenCalledWith(
+      "https://github.com/asiloisad/pulsar-cursor-leader",
+    );
+  });
+
   it("should open internal package repository url", function () {
     loadPackageFromRemote("package-internal");
     spyOn(atom, "openExternal");

@@ -36,9 +36,18 @@ const repoUrlFromRepository = (repository) => {
   } else {
     repo = "";
   }
+  if (!repo) return "";
 
+  // git@host:owner/repo → https so it opens in a browser, not as a file path.
+  const scp = repo.match(/^git@([^:]+):(.+)$/);
+  if (scp) repo = `https://${scp[1]}/${scp[2]}`;
+  repo = repo.replace(/^git\+/, "");
   if (repo.endsWith(".git")) {
-    repo = repo.replace(".git", "");
+    repo = repo.replace(/\.git$/, "");
+  }
+  // A bare owner/repo shorthand → GitHub web URL.
+  if (/^[\w.-]+\/[\w.-]+$/.test(repo)) {
+    repo = `https://github.com/${repo}`;
   }
 
   return repo;

@@ -1,5 +1,6 @@
 const {
   ownerFromRepository,
+  repoUrlFromRepository,
   packageOrigin,
   packageCoordinate,
   packagePanelKey,
@@ -15,6 +16,26 @@ describe("Utils", () => {
     it("handles a short github url", () => {
       const owner = ownerFromRepository("omgwow/some-package");
       expect(owner).toBe("omgwow");
+    });
+  });
+
+  describe("repoUrlFromRepository", () => {
+    it("returns a full GitHub URL for a shorthand so it opens in a browser", () => {
+      expect(repoUrlFromRepository("asiloisad/pulsar-invert-colors")).toBe(
+        "https://github.com/asiloisad/pulsar-invert-colors",
+      );
+    });
+
+    it("normalizes full URLs, .git, and SSH remotes", () => {
+      expect(repoUrlFromRepository("https://github.com/owner/repo.git")).toBe(
+        "https://github.com/owner/repo",
+      );
+      expect(repoUrlFromRepository("git@github.com:owner/repo.git")).toBe(
+        "https://github.com/owner/repo",
+      );
+      expect(repoUrlFromRepository({ url: "git+https://github.com/owner/repo.git" })).toBe(
+        "https://github.com/owner/repo",
+      );
     });
   });
 
