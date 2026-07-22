@@ -255,6 +255,65 @@ describe("PackageCard", function () {
       expect(card.refs.versionValue.value).toBe("tag:v2.0.0");
     });
 
+    it("blocks the native list, shows a spinner, and lists tags on open", async function () {
+      setPackageStatusSpies({ installed: true, disabled: false, hasSettings: false });
+      spyOn(PackageCard.prototype, "getInstalledMetadata").andReturn({
+        name: "lazy-refs",
+        version: "1.0.0",
+        repository: "owner/lazy-refs",
+        apmInstallSource: {
+          type: "git",
+          origin: "github.com/owner/lazy-refs",
+          selector: { type: "tag", value: "v1.0.0" },
+          sha: "a".repeat(40),
+          updatePolicy: "tag",
+        },
+      });
+      const client = packageManager.getCatalogClient();
+      const loadRefs = spyOn(client, "loadRefs").andCallFake((pack) =>
+        Promise.resolve({
+          ...pack,
+          refs: { defaultBranch: "main", tags: [{ name: "v1.0.0", sha: "a".repeat(40) }] },
+        }),
+      );
+
+      card = new PackageCard(
+        {
+          name: "lazy-refs",
+          version: "1.0.0",
+          repository: "owner/lazy-refs",
+          originKey: "github.com/owner/lazy-refs",
+          status: "ready",
+          engines: { atom: "*" },
+          apmInstallSource: {
+            type: "git",
+            origin: "github.com/owner/lazy-refs",
+            selector: { type: "tag", value: "v1.0.0" },
+            sha: "a".repeat(40),
+            updatePolicy: "tag",
+          },
+        },
+        new SettingsView(),
+        packageManager,
+      );
+      jasmine.attachToDOM(card.element);
+      // Installed cards have no ref index until the dropdown is opened.
+      expect(card.refs.versionValue.tagName).toBe("SELECT");
+      expect(card.pack.refs).toBeUndefined();
+
+      const preventDefault = jasmine.createSpy("preventDefault");
+      await card.onVersionOpen({ preventDefault });
+
+      // The stale (current-only) list was blocked and the full tag list fetched.
+      expect(preventDefault).toHaveBeenCalled();
+      expect(loadRefs).toHaveBeenCalled();
+      const labels = Array.from(card.refs.versionValue.options, ({ textContent }) => textContent);
+      expect(labels).toContain("@v1.0.0");
+      expect(labels).toContain("~main");
+      // The spinner is hidden again once loading finishes.
+      expect(card.refs.versionSpinner).toHaveClass("hidden");
+    });
+
     it("reflects the installed branch, not the catalog tag, in the version selector", function () {
       setPackageStatusSpies({ installed: true, disabled: false, hasSettings: false });
       spyOn(PackageCard.prototype, "getInstalledMetadata").andReturn({

@@ -155,17 +155,25 @@ export default class PackageCard {
             </a>
             <span className="package-version">
               {this.canSelectVersion() ? (
-                <select
-                  ref="versionValue"
-                  className="value package-version-select"
-                  value={this.selectedVersionValue()}
-                  disabled={this.pack.status === "validating"}
-                  onclick={(event) => event.stopPropagation()}
-                  onfocus={this.loadVersionRefs.bind(this)}
-                  onchange={this.didChangeRef.bind(this)}
-                >
-                  {this.versionOptions()}
-                </select>
+                <span className="package-version-control">
+                  <select
+                    ref="versionValue"
+                    className="value package-version-select"
+                    value={this.selectedVersionValue()}
+                    disabled={this.pack.status === "validating"}
+                    onclick={(event) => event.stopPropagation()}
+                    onmousedown={this.onVersionOpen.bind(this)}
+                    onkeydown={this.onVersionKeyDown.bind(this)}
+                    onchange={this.didChangeRef.bind(this)}
+                  >
+                    {this.versionOptions()}
+                  </select>
+                  <span
+                    ref="versionSpinner"
+                    className="package-version-spinner hidden"
+                    title="Loading versions…"
+                  />
+                </span>
               ) : (
                 <span ref="versionValue" className="value">
                   {this.pack.version == null ? "" : String(this.pack.version)}
@@ -397,21 +405,61 @@ export default class PackageCard {
     ));
   }
 
-  // Installed cards start without a ref list. The first time the selector is
-  // opened, list the origin's tags and default branch via ls-remote, then
-  // rebuild the <option>s in place — a full re-render would undo the card's
-  // imperative button/state adjustments.
-  async loadVersionRefs() {
-    if (this.pack.refs || this.refsLoading) return;
-    this.refsLoading = true;
+  // Installed cards start without a ref list. Rather than open the native
+  // dropdown onto the current-only list and mutate it underneath the user, block
+  // the open, show a spinner while the origin's tags and default branch are
+  // listed via ls-remote, then open the completed list.
+  async onVersionOpen(event) {
+    if (this.pack.refs) return; // refs already loaded → let it open natively
+    if (event) event.preventDefault(); // don't open the stale (current-only) list
+    await this.loadVersionRefs();
+    const select = this.refs.versionValue;
+    if (!select || select.tagName !== "SELECT") return;
+    select.focus();
     try {
-      this.pack = await this.packageManager.getCatalogClient().loadRefs(this.pack);
-      this.refreshVersionOptions();
+      // Open the now-complete list if the user gesture is still valid.
+      select.showPicker();
     } catch {
-      // Leave the version as-is if the refs cannot be listed.
-    } finally {
-      this.refsLoading = false;
+      // The gesture expired during a slow fetch; the list is ready and the next
+      // click opens it.
     }
+  }
+
+  onVersionKeyDown(event) {
+    if (this.pack.refs) return;
+    const opensList =
+      event.key === "ArrowDown" ||
+      event.key === "ArrowUp" ||
+      event.key === "Enter" ||
+      event.key === " " ||
+      event.key === "Spacebar";
+    if (opensList) this.onVersionOpen(event);
+  }
+
+  // Lists the origin's tags and default branch and rebuilds the <option>s in
+  // place — a full re-render would undo the card's imperative button/state
+  // adjustments. Deduped so concurrent opens share one fetch.
+  loadVersionRefs() {
+    if (this.pack.refs) return Promise.resolve();
+    if (this.refsLoadingPromise) return this.refsLoadingPromise;
+    this.setVersionLoading(true);
+    this.refsLoadingPromise = (async () => {
+      try {
+        this.pack = await this.packageManager.getCatalogClient().loadRefs(this.pack);
+        this.refreshVersionOptions();
+      } catch {
+        // Leave the version as-is if the refs cannot be listed.
+      } finally {
+        this.setVersionLoading(false);
+        this.refsLoadingPromise = null;
+      }
+    })();
+    return this.refsLoadingPromise;
+  }
+
+  setVersionLoading(loading) {
+    const spinner = this.refs.versionSpinner;
+    if (spinner) spinner.classList.toggle("hidden", !loading);
   }
 
   refreshVersionOptions() {

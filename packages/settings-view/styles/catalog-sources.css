@@ -113,6 +113,23 @@
   outline: none;
 }
 
+.settings-view .package-version-control {
+  display: inline-flex;
+  align-items: center;
+}
+
+/* Shown next to the version while an installed card lists its tags on demand. */
+.settings-view .package-version-spinner {
+  display: inline-block;
+  width: 0.9em;
+  height: 0.9em;
+  margin-left: 0.4em;
+  border: 2px solid var(--text-color-subtle);
+  border-top-color: transparent;
+  border-radius: 50%;
+  animation: settings-view-spin 0.7s linear infinite;
+}
+
 /* The bundled card that is currently overridden by a community install is
    informational only: greyed out with a single, disabled "Override" marker. */
 .settings-view .package-card.is-shadowed {
@@ -155,5 +172,11 @@
   }
   50% {
     opacity: 0.3;
+  }
+}
+
+@keyframes settings-view-spin {
+  to {
+    transform: rotate(360deg);
   }
 }
