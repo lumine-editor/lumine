@@ -214,29 +214,6 @@ export default class PackageDetailView {
     return loadedPackage;
   }
 
-  fetchPackage() {
-    this.showLoadingMessage();
-    this.packageManager.getClient().package(this.pack.name, (err, packageData) => {
-      if (err || !packageData || !packageData.name) {
-        this.hideLoadingMessage();
-        this.showErrorMessage();
-      } else {
-        this.pack = packageData;
-        // TODO: this should match Package.loadMetadata from core, but this is
-        // an acceptable hacky workaround
-        this.pack.metadata = _.extend(
-          this.pack.metadata != null ? this.pack.metadata : {},
-          this.pack,
-        );
-        this.completeInitialization();
-      }
-    });
-  }
-
-  showLoadingMessage() {
-    this.refs.loadingMessage.classList.remove("hidden");
-  }
-
   hideLoadingMessage() {
     if (this.refs.loadingMessage) this.refs.loadingMessage.classList.add("hidden");
   }

@@ -6,13 +6,9 @@ const globPkg = require("glob");
 const glob = typeof globPkg === "function" ? require("util").promisify(globPkg) : globPkg.glob;
 
 module.exports = class AtomIoClient {
-  constructor(packageManager, baseURL) {
+  constructor(packageManager) {
     this.packageManager = packageManager;
-    this.baseURL = baseURL;
-    if (this.baseURL == null) {
-      this.baseURL = "https://api.pulsar-edit.dev/api/";
-    }
-    // 5 hour expiry
+    // 5 hour expiry, used to keep the newest cached avatar around
     this.expiry = 1000 * 60 * 60 * 5;
     this.createAvatarCache();
     this.expireAvatarCache();
@@ -33,71 +29,8 @@ module.exports = class AtomIoClient {
     });
   }
 
-  // Public: get a package from the atom.io API, with the appropriate level of
-  // caching.
-  package(name, callback) {
-    const packagePath = `packages/${name}`;
-    const data = this.fetchFromCache(packagePath);
-    if (data) {
-      return callback(null, data);
-    } else {
-      return this.request(packagePath, callback);
-    }
-  }
-
-  request(path, callback) {
-    const url = `${this.baseURL}${path}`;
-    const options = { headers: { "User-Agent": navigator.userAgent } };
-
-    fetch(url, options)
-      .then((response) => response.text())
-      .then((text) => {
-        // NOTE: parse the body manually so a malformed response surfaces as an
-        // error to the callback rather than resolving with garbage.
-        const body = this.parseJSON(text);
-        delete body.versions;
-
-        const cached = this.deepCache(path, body);
-        // cached =
-        //   data: body
-        //   createdOn: Date.now()
-        // localStorage.setItem(@cacheKeyForPath(path), JSON.stringify(cached))
-        callback(null, cached.data);
-      })
-      .catch((error) => callback(error));
-  }
-
-  deepCache(path, body) {
-    const cached = {
-      data: body,
-      createdOn: Date.now(),
-    };
-    localStorage.setItem(this.cacheKeyForPath(path), JSON.stringify(cached));
-    if (body instanceof Array) {
-      body.forEach((child) => this.deepCache(`packages/${child.name}`, child));
-    }
-    return cached;
-  }
-
-  cacheKeyForPath(path) {
-    return `settings-view:${path}`;
-  }
-
   online() {
     return navigator.onLine;
-  }
-
-  // This could use a better name, since it checks whether it's appropriate to return
-  // the cached data and pretends it's null if it's stale and we're online
-  fetchFromCache(packagePath) {
-    let cached = localStorage.getItem(this.cacheKeyForPath(packagePath));
-    cached = cached ? this.parseJSON(cached) : undefined;
-    if (cached != null && (!this.online() || Date.now() - cached.createdOn < this.expiry)) {
-      return cached.data;
-    } else {
-      // falsy data means "try to hit the network"
-      return null;
-    }
   }
 
   createAvatarCache() {
@@ -212,9 +145,5 @@ module.exports = class AtomIoClient {
     return this.cachePath != null
       ? this.cachePath
       : (this.cachePath = path.join(remote.app.getPath("userData"), "Cache", "settings-view"));
-  }
-
-  parseJSON(s) {
-    return JSON.parse(s);
   }
 };

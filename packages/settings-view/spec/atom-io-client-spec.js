@@ -12,36 +12,6 @@ describe("AtomIoClient", function () {
     return this.client.avatar("test-user", function () {});
   });
 
-  describe("request", function () {
-    it("fetches api json from cache if the network is unavailable", function () {
-      spyOn(this.client, "online").andReturn(false);
-      spyOn(this.client, "fetchFromCache").andReturn({});
-      spyOn(this.client, "request");
-      this.client.package("test-package", function () {});
-
-      expect(this.client.fetchFromCache).toHaveBeenCalled();
-      expect(this.client.request).not.toHaveBeenCalled();
-    });
-
-    it("returns an error if the API response is not JSON", function () {
-      const jsonParse = JSON.parse;
-
-      waitsFor(function (done) {
-        spyOn(this.client, "parseJSON").andThrow();
-        return this.client.request("path", function (error, _data) {
-          expect(error).not.toBeNull();
-          return done();
-        });
-      });
-
-      return runs(
-        () =>
-          // Tests will throw without this as cleanup requires JSON.parse to work
-          (JSON.parse = jsonParse),
-      );
-    });
-  });
-
   it("handles glob errors", function () {
     // The glob library no longer lists directories through the callback `fs`
     // API, so inject the failure at the client's own glob seam.

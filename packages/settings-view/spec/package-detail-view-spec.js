@@ -4,7 +4,6 @@ const path = require("path");
 const PackageDetailView = require("../lib/package-detail-view");
 const PackageManager = require("../lib/package-manager");
 const SettingsView = require("../lib/settings-view");
-const AtomIoClient = require("../lib/atom-io-client");
 const SnippetsProvider = {
   getSnippets() {
     return {};
@@ -165,12 +164,8 @@ describe("PackageDetailView", function () {
     expect(view.refs.sections.querySelector(".settings-panel")).toBeNull();
   });
 
-  it("shows an error when package metadata cannot be loaded via the API", function () {
+  it("shows an error when an unknown package has no metadata, without querying the registry", function () {
     packageManager.client = createClientSpy();
-    packageManager.client.package.andCallFake(function (name, cb) {
-      const error = new Error("API error");
-      return cb(error, null);
-    });
 
     view = new PackageDetailView(
       { name: "nonexistent-package" },
@@ -179,29 +174,7 @@ describe("PackageDetailView", function () {
       SnippetsProvider,
     );
 
-    expect(view.refs.errorMessage.classList.contains("hidden")).not.toBe(true);
-    expect(view.refs.loadingMessage.classList.contains("hidden")).toBe(true);
-    expect(view.element.querySelectorAll(".package-card").length).toBe(0);
-  });
-
-  it("shows an error when package metadata cannot be loaded from the cache and the network is unavailable", function () {
-    localStorage.removeItem("settings-view:packages/some-package");
-
-    spyOn(AtomIoClient.prototype, "online").andReturn(false);
-    spyOn(AtomIoClient.prototype, "request").andCallFake((path, callback) =>
-      callback(new Error("getaddrinfo ENOENT atom.io:443")),
-    );
-    spyOn(AtomIoClient.prototype, "fetchFromCache").andCallThrough();
-
-    view = new PackageDetailView(
-      { name: "some-package" },
-      new SettingsView(),
-      packageManager,
-      SnippetsProvider,
-    );
-
-    expect(AtomIoClient.prototype.fetchFromCache).not.toHaveBeenCalled();
-
+    expect(packageManager.client.package).not.toHaveBeenCalled();
     expect(view.refs.errorMessage.classList.contains("hidden")).not.toBe(true);
     expect(view.refs.loadingMessage.classList.contains("hidden")).toBe(true);
     expect(view.element.querySelectorAll(".package-card").length).toBe(0);
