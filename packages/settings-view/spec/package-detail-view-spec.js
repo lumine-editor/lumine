@@ -160,7 +160,10 @@ describe("PackageDetailView", function () {
       originKey: "github.com/owner/pkg-with-license",
       resolvedSha: "a".repeat(40),
       readme: "# pkg-with-license",
-      license: "MIT License\n\nPermission is hereby granted, free of charge...",
+      // `license` is the package.json SPDX id and must NOT be shown as the body;
+      // the full text lives in `licenseText`.
+      license: "MIT",
+      licenseText: "MIT License\n\nPermission is hereby granted, free of charge...",
       licenseIsMarkdown: false,
     };
     view = new PackageDetailView(
@@ -174,7 +177,9 @@ describe("PackageDetailView", function () {
     expect(view.refs.chapterTabs.querySelector('[data-chapter-tab="license"]')).not.toBeNull();
     const licenseSection = view.refs.sections.querySelector('[data-chapter="license"]');
     expect(licenseSection).not.toBeNull();
+    // Shows the full license text, not the bare SPDX identifier.
     expect(licenseSection.textContent).toContain("Permission is hereby granted");
+    expect(licenseSection.querySelector(".package-license-text").textContent).not.toBe("MIT");
 
     // README and License both belong to the version, so both survive a preview.
     view.applySelectedRef({ previewVersion: true });
@@ -196,6 +201,8 @@ describe("PackageDetailView", function () {
       originKey: "github.com/owner/pkg-lazy-license",
       resolvedSha: "b".repeat(40),
       readme: "# pkg-lazy-license",
+      // A bare SPDX `license` must not suppress fetching the real LICENSE text.
+      license: "MIT",
     };
     view = new PackageDetailView(
       { ...metadata, metadata },

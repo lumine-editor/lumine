@@ -595,6 +595,9 @@ export default class PackageDetailView {
       fs.existsSync(this.licensePath) &&
       fs.statSync(this.licensePath).isFile();
 
+    // Note: `meta.license` is the package.json SPDX identifier (e.g. "MIT"), not
+    // the license text — the full text lives in `meta.licenseText`, either read
+    // from the local file or fetched for the resolved commit.
     if (localAvailable) {
       try {
         content = fs.readFileSync(this.licensePath, { encoding: "utf8" });
@@ -603,8 +606,8 @@ export default class PackageDetailView {
       } catch {
         content = null;
       }
-    } else if (meta.license != null) {
-      content = meta.license;
+    } else if (meta.licenseText != null) {
+      content = meta.licenseText;
       isMarkdown = meta.licenseIsMarkdown === true;
       licenseSrc = meta.licenseSource || null;
     } else if (!this.licenseRequested && meta.originKey && meta.resolvedSha) {
@@ -614,7 +617,7 @@ export default class PackageDetailView {
         .loadLicense(meta)
         .then((entry) => {
           if (!entry) return;
-          meta.license = entry.body;
+          meta.licenseText = entry.body;
           meta.licenseSource = entry.source;
           meta.licenseIsMarkdown = entry.isMarkdown === true;
           this.renderLicense();
@@ -677,7 +680,7 @@ export default class PackageDetailView {
       meta.readme = undefined;
       meta.readmeSource = undefined;
       this.readmeRequested = false;
-      meta.license = undefined;
+      meta.licenseText = undefined;
       meta.licenseSource = undefined;
       meta.licenseIsMarkdown = undefined;
       this.licenseRequested = false;
