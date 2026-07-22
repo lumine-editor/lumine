@@ -36,10 +36,21 @@ function symlinkType() {
   return process.platform === "win32" ? "junction" : "dir";
 }
 
+// On Windows a .cmd/.bat (e.g. npm.cmd) must be spawned through a shell — Node
+// >= 18.20 / 20.12 rejects them with EINVAL otherwise (CVE-2024-27980). git is
+// an .exe, so it keeps its direct spawn and its URL/ref args are never shell
+// interpreted.
+function spawnOptions(command, options, platform = process.platform) {
+  if (platform === "win32" && /\.(cmd|bat)$/i.test(command)) {
+    return { ...options, shell: true };
+  }
+  return options;
+}
+
 // Runs a child process synchronously, streaming its output to the user. Throws
 // on a non-zero exit code.
 function run(command, args, options = {}) {
-  const result = spawnSync(command, args, { stdio: "inherit", ...options });
+  const result = spawnSync(command, args, { stdio: "inherit", ...spawnOptions(command, options) });
   if (result.error) {
     if (result.error.code === "ENOENT") {
       throw new Error(`Could not find the \`${command}\` command on your PATH.`);
@@ -54,7 +65,7 @@ function run(command, args, options = {}) {
 
 // Runs a child process synchronously and returns its captured stdout.
 function capture(command, args, options = {}) {
-  const result = spawnSync(command, args, { encoding: "utf8", ...options });
+  const result = spawnSync(command, args, { encoding: "utf8", ...spawnOptions(command, options) });
   if (result.error) {
     throw result.error;
   }
@@ -226,4 +237,4 @@ async function runPackageCommand(command) {
   }
 }
 
-module.exports = { runPackageCommand };
+module.exports = { runPackageCommand, spawnOptions };
