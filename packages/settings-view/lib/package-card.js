@@ -448,12 +448,14 @@ export default class PackageCard {
       this.pack.resolvedRef = null;
       this.pack.updatePolicy = undefined;
       // Back on the installed version: cancel any pending preview and restore.
+      this.pack.previewVersion = false;
       this.manifestPreviewId = (this.manifestPreviewId || 0) + 1;
       this.setDescription(this.installedDescription);
     } else {
       this.pack.latestSha = sha;
       this.pack.resolvedRef = selector;
       this.pack.updatePolicy = updatePolicyForVersionSelector(selector);
+      this.pack.previewVersion = true;
       if (selector.type === "tag") {
         this.newVersion = stripLeadingV(selector.value);
         this.newSha = null;

@@ -509,7 +509,9 @@ export default class PackageDetailView {
   applySelectedRef(pack) {
     if (!this.pack || !this.pack.metadata) return;
     const meta = this.pack.metadata;
-    const sha = pack.resolvedSha || pack.latestSha || null;
+    // For an installed card the freshly selected commit is `latestSha`;
+    // `resolvedSha` may still hold the installed commit.
+    const sha = pack.latestSha || pack.resolvedSha || null;
     const shaChanged = !!sha && sha !== meta.resolvedSha;
     if (pack.selectedRef) meta.selectedRef = pack.selectedRef;
     if (pack.originKey) meta.originKey = pack.originKey;
@@ -529,16 +531,9 @@ export default class PackageDetailView {
       this.renderReadme();
     }
     // Settings, keymaps, grammars, and snippets belong to the installed version.
-    // While a different version is selected, show only its README.
-    const installedSha = this.installedSha();
-    const previewingOther =
-      !!sha && !!installedSha && sha.toLowerCase() !== installedSha.toLowerCase();
-    this.setConfigSectionsVisible(!previewingOther);
-  }
-
-  installedSha() {
-    const install = this.pack && this.pack.metadata && this.pack.metadata.apmInstallSource;
-    return install && install.sha ? install.sha : null;
+    // While a different version is selected, show only its README (the card sets
+    // `previewVersion` when the selected ref is not the installed one).
+    this.setConfigSectionsVisible(pack.previewVersion !== true);
   }
 
   setConfigSectionsVisible(visible) {

@@ -118,6 +118,31 @@ describe("PackageDetailView", function () {
     expect(render.mostRecentCall.args[1].filePath).toBe(path.join(packagePath, "README.md"));
   });
 
+  it("shows only the README while a version other than the installed one is selected", function () {
+    atom.packages.loadPackage(path.join(__dirname, "fixtures", "package-with-config"));
+    const pack = atom.packages.getLoadedPackage("package-with-config");
+    view = new PackageDetailView(pack, new SettingsView(), packageManager, SnippetsProvider);
+
+    const readmeElement = view.readmeView && view.readmeView.element;
+    const configSections = Array.from(view.refs.sections.children).filter(
+      (child) => child !== readmeElement,
+    );
+    expect(configSections.length).toBeGreaterThan(0);
+
+    // Selecting a different version hides the config sections, leaving the README.
+    view.applySelectedRef({ previewVersion: true });
+    for (const section of configSections) {
+      expect(section.style.display).toBe("none");
+    }
+    expect(readmeElement.style.display).not.toBe("none");
+
+    // Selecting the installed version again restores them.
+    view.applySelectedRef({ previewVersion: false });
+    for (const section of configSections) {
+      expect(section.style.display).not.toBe("none");
+    }
+  });
+
   it("does not call the atom.io api for package metadata when present", function () {
     atom.packages.loadPackage(path.join(__dirname, "fixtures", "package-with-config"));
     packageManager.client = createClientSpy();
