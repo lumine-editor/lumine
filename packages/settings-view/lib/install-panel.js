@@ -569,16 +569,27 @@ export default class InstallPanel {
 
     const progressive = new Map(this.catalogPackages.map((pack) => [packageOrigin(pack), pack]));
     let renderTimer = null;
-    const scheduleRender = () => {
-      if (renderTimer) return;
-      renderTimer = setTimeout(() => {
+    let pendingRecords = 0;
+    const flushRender = () => {
+      if (renderTimer) {
+        clearTimeout(renderTimer);
         renderTimer = null;
-        if (generation !== this.catalogGeneration) return;
-        this.catalogPackages = Array.from(progressive.values());
-        const query = this.refs.searchEditor.getText().trim();
-        if (query && this.catalogIndexing) this.renderIncompleteSearch(query);
-        else this.renderBrowseList();
-      }, 50);
+      }
+      pendingRecords = 0;
+      if (generation !== this.catalogGeneration) return;
+      this.catalogPackages = Array.from(progressive.values());
+      const query = this.refs.searchEditor.getText().trim();
+      if (query && this.catalogIndexing) this.renderIncompleteSearch(query);
+      else this.renderBrowseList();
+    };
+    const scheduleRender = () => {
+      // Redraw once every ~10 hydrated packages, with a short time-based fallback
+      // so the trailing few still appear promptly.
+      if (++pendingRecords >= 50) {
+        flushRender();
+      } else if (!renderTimer) {
+        renderTimer = setTimeout(flushRender, 5000);
+      }
     };
 
     try {
