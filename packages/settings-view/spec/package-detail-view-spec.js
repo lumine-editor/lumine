@@ -294,24 +294,6 @@ describe("PackageDetailView", function () {
     expect(clearToc).toHaveBeenCalled();
   });
 
-  it("shows the full owner/repo in the repo link for a shorthand repository", function () {
-    const metadata = {
-      name: "cursor-leader",
-      version: "0.1.0",
-      repository: "asiloisad/pulsar-cursor-leader",
-      owner: "asiloisad",
-      engines: { atom: "*" },
-    };
-    view = new PackageDetailView(
-      { ...metadata, metadata },
-      new SettingsView(),
-      packageManager,
-      SnippetsProvider,
-    );
-
-    expect(view.refs.packageRepo.textContent).toBe("asiloisad/pulsar-cursor-leader");
-  });
-
   it("does not call the atom.io api for package metadata when present", function () {
     atom.packages.loadPackage(path.join(__dirname, "fixtures", "package-with-config"));
     packageManager.client = createClientSpy();
@@ -444,44 +426,5 @@ describe("PackageDetailView", function () {
   it("should show 'Install' as the first breadcrumb by default", function () {
     loadPackageFromRemote("package-with-readme");
     expect(view.refs.breadcrumb.textContent).toBe("Install");
-  });
-
-  it("should open repository url", function () {
-    loadPackageFromRemote("package-with-readme");
-    spyOn(atom, "openExternal");
-    view.refs.packageRepo.click();
-    expect(atom.openExternal).toHaveBeenCalledWith(
-      "https://github.com/example/package-with-readme",
-    );
-  });
-
-  it("opens the full GitHub URL for a shorthand repository, not a file path", function () {
-    const metadata = {
-      name: "cursor-leader",
-      version: "0.1.0",
-      repository: "asiloisad/pulsar-cursor-leader",
-      owner: "asiloisad",
-      engines: { atom: "*" },
-    };
-    view = new PackageDetailView(
-      { ...metadata, metadata },
-      new SettingsView(),
-      packageManager,
-      SnippetsProvider,
-    );
-    spyOn(atom, "openExternal");
-    view.refs.packageRepo.click();
-    expect(atom.openExternal).toHaveBeenCalledWith(
-      "https://github.com/asiloisad/pulsar-cursor-leader",
-    );
-  });
-
-  it("should open internal package repository url", function () {
-    loadPackageFromRemote("package-internal");
-    spyOn(atom, "openExternal");
-    view.refs.packageRepo.click();
-    expect(atom.openExternal).toHaveBeenCalledWith(
-      "https://github.com/lumine-code/lumine/tree/master/packages/package-internal",
-    );
   });
 });

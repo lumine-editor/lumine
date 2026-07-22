@@ -779,7 +779,7 @@ describe("PackageCard", function () {
       expect(card.refs.packageMessage.textContent).toBe("");
     });
 
-    it("offers Override when the name matches a bundled package from another origin", function () {
+    it("offers Replace when the name matches a bundled package from another origin", function () {
       setPackageStatusSpies({ installed: true, disabled: false, hasSettings: false });
       spyOn(PackageCard.prototype, "getInstalledMetadata").andReturn({
         name: "search-panel",
@@ -793,7 +793,7 @@ describe("PackageCard", function () {
       jasmine.attachToDOM(card.element);
       expect(card.refs.installButton).not.toBeVisible();
       expect(card.refs.replaceButton).toBeVisible();
-      expect(card.refs.replaceButton.textContent).toBe("Override");
+      expect(card.refs.replaceButton.textContent).toBe("Replace");
       expect(card.installNoteTooltip).toBeTruthy();
     });
 
@@ -1045,20 +1045,6 @@ describe("PackageCard", function () {
     expect(badge).toHaveClass("badge-dot-warn");
     badge?.click();
     expect(atom.openExternal).toHaveBeenCalledWith("https://example.com");
-  });
-
-  it("shows the author details", function () {
-    const authorName = "authorName";
-    const pack = {
-      name: "some-package",
-      version: "0.1.0",
-      repository: `https://github.com/${authorName}/some-package`,
-    };
-    card = new PackageCard(pack, new SettingsView(), packageManager);
-
-    jasmine.attachToDOM(card.element);
-
-    expect(card.refs.loginLink.textContent).toBe(authorName);
   });
 
   describe("when the package is not installed", function () {

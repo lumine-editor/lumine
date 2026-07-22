@@ -78,11 +78,13 @@
       }
     }
 
+    /* The repository reference sits next to the avatar (in place of the author). */
     .package-repo {
-      float: right;
       font-size: 0.8em;
       font-weight: normal;
       color: var(--text-color-subtle);
+      margin-left: var(--component-padding);
+      vertical-align: middle;
       &:hover {
         color: var(--text-color-info);
         text-decoration: underline;

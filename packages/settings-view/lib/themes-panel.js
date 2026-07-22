@@ -268,6 +268,12 @@ export default class ThemesPanel extends CollapsibleSectionPanel {
               <span ref="totalPackages" className="section-heading-count badge badge-flexible">
                 â€¦
               </span>
+              <button
+                type="button"
+                className="btn btn-default icon icon-sync section-heading-refresh"
+                title="Refresh list"
+                onclick={() => this.loadPackages()}
+              />
             </div>
             <div className="editor-container">
               <TextEditor ref="filterEditor" mini placeholderText="Filter themes by name" />

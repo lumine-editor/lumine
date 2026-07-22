@@ -143,7 +143,6 @@ export default class PackageCard {
     const displayName =
       (this.pack.gitUrlInfo && !knowsRealName ? this.pack.gitUrlInfo.project : this.pack.name) ||
       "";
-    const owner = ownerFromRepository(this.pack.repository);
     const repoReference = repoReferenceFromRepository(this.pack.repository);
     const description = this.pack.description || "";
     const cardClasses = `package-card col-lg-8${
@@ -184,11 +183,6 @@ export default class PackageCard {
                 </span>
               )}
             </span>
-            {repoReference ? (
-              <a ref="repoLink" className="package-repo">
-                {repoReference}
-              </a>
-            ) : null}
           </h4>
           <span ref="packageDescription" className="package-description">
             {description}
@@ -214,9 +208,11 @@ export default class PackageCard {
                 src="data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7"
               />
             </a>
-            <a ref="loginLink" className="author">
-              {owner}
-            </a>
+            {repoReference ? (
+              <a ref="repoLink" className="package-repo">
+                {repoReference}
+              </a>
+            ) : null}
           </div>
           <div className="meta-controls">
             <div className="btn-toolbar">
@@ -778,12 +774,6 @@ export default class PackageCard {
         atom.openExternal(`https://github.com/${owner}`);
       }
     };
-    this.refs.loginLink.addEventListener("click", packageAuthorClickHandler);
-    this.disposables.add(
-      new Disposable(() => {
-        this.refs.loginLink.removeEventListener("click", packageAuthorClickHandler);
-      }),
-    );
     this.refs.avatarLink.addEventListener("click", packageAuthorClickHandler);
     this.disposables.add(
       new Disposable(() => {
@@ -1042,7 +1032,7 @@ export default class PackageCard {
       // Replace is impossible. Keep a disabled Install with the reason.
       this.refs.installButton.style.display = "none";
       this.refs.replaceButton.style.display = "";
-      this.refs.replaceButton.textContent = "Override";
+      this.refs.replaceButton.textContent = "Replace";
       this.setInstallNote(
         `Installing this package will shadow the bundled “${this.pack.name}” package.`,
         false,

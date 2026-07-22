@@ -380,6 +380,17 @@
     margin-left: 0.5em;
   }
 
+  /* Refresh-list button on the right of an installed-packages/themes heading. */
+  .section-heading-refresh {
+    float: right;
+    font-size: 0.6em;
+    line-height: 1;
+
+    &.icon:before {
+      margin-right: 0;
+    }
+  }
+
   .section-body {
     margin-top: 20px;
   }
@@ -687,13 +698,6 @@
 
     .package-chapter-tabs {
       margin-left: auto; /* push the chapter tabs to the right side */
-
-      /* Core .btn.selected uses --text-color-selected, which is near-black on the
-         accent background in light themes; use the button's own selected text
-         color so the active tab's icon reads clearly. */
-      .btn.selected {
-        color: var(--button-text-color-selected);
-      }
     }
 
     .package-license {
@@ -804,22 +808,10 @@
       margin: 0 15px var(--component-padding) 15px;
     }
 
-    .update-link,
-    .repo-link {
+    .update-link {
       &:hover {
         cursor: pointer;
         text-decoration: underline;
-      }
-    }
-
-    /* Repository reference on the left, startup time pushed to the right. */
-    .package-detail-meta {
-      display: flex;
-      align-items: baseline;
-      flex-wrap: wrap;
-
-      .startup-time {
-        margin-left: auto;
       }
     }
   }

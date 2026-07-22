@@ -74,24 +74,6 @@ export default class PackageDetailView {
       }),
     );
 
-    const packageRepoClickHandler = (event) => {
-      event.preventDefault();
-      const repoUrl = this.packageManager.getRepositoryUrl(this.pack);
-      if (typeof repoUrl === "string") {
-        if (URL.parse(repoUrl)?.pathname === "/lumine-code/lumine") {
-          atom.openExternal(`${repoUrl}/tree/master/packages/${this.pack.name}`);
-        } else {
-          atom.openExternal(repoUrl);
-        }
-      }
-    };
-    this.refs.packageRepo.addEventListener("click", packageRepoClickHandler);
-    this.disposables.add(
-      new Disposable(() => {
-        this.refs.packageRepo.removeEventListener("click", packageRepoClickHandler);
-      }),
-    );
-
     const issueButtonClickHandler = (event) => {
       event.preventDefault();
       let bugUri = this.packageManager.getRepositoryBugUri(this.pack);
@@ -177,7 +159,6 @@ export default class PackageDetailView {
       this.refs.packageCardParent.replaceChild(this.packageCard.element, this.refs.loadingMessage);
     }
 
-    this.refs.packageRepo.classList.remove("hidden");
     this.refs.startupTime.classList.remove("hidden");
     this.refs.buttons.classList.remove("hidden");
     this.activateConfig();
@@ -455,16 +436,13 @@ export default class PackageDetailView {
         <div className="panels-item">
           <section className="section">
             <form className="section-container package-detail-view">
-              <div className="container package-container">{packageCardView}</div>
+              <p
+                ref="startupTime"
+                className="text icon icon-dashboard startup-time hidden"
+                tabIndex="-1"
+              />
 
-              <div className="package-detail-meta">
-                <p ref="packageRepo" className="link icon icon-repo repo-link hidden" />
-                <p
-                  ref="startupTime"
-                  className="text icon icon-dashboard startup-time hidden"
-                  tabIndex="-1"
-                />
-              </div>
+              <div className="container package-container">{packageCardView}</div>
 
               <div className="package-detail-actions">
                 <div ref="buttons" className="btn-wrap-group hidden">
@@ -498,19 +476,6 @@ export default class PackageDetailView {
   populate() {
     this.refs.title.textContent = `${_.undasherize(_.uncamelcase(this.pack.name))}`;
     this.type = this.pack.metadata.theme ? "theme" : "package";
-
-    const repoUrl = this.packageManager.getRepositoryUrl(this.pack);
-    if (repoUrl) {
-      // getRepositoryUrl may return a full URL (pathname starts with "/") or an
-      // owner/repo shorthand (no leading slash), so strip only a leading slash
-      // rather than the first character.
-      const repoName = (URL.parse(repoUrl)?.pathname ?? repoUrl).replace(/^\//, "");
-      this.refs.packageRepo.textContent = repoName;
-      this.refs.packageRepo.style.display = "";
-    } else {
-      this.refs.packageRepo.style.display = "none";
-    }
-
     this.updateInstalledState();
   }
 
