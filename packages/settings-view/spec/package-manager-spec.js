@@ -510,6 +510,21 @@ describe("PackageManager", function () {
         expect(source).toContain("lumine-code/hydrogen-next");
       });
     });
+
+    it("does not block install completion on a package that defers activation", function () {
+      spyOn(atom.packages, "loadPackage");
+      spyOn(atom.packages, "isPackageDisabled").andReturn(false);
+      // A package with activationCommands/hooks never resolves activatePackage
+      // until its trigger fires; the install must not await that.
+      spyOn(atom.packages, "activatePackage").andReturn(new Promise(() => {}));
+
+      const result = packageManager.activateInstalledPackage("deferred-package", { theme: false });
+
+      expect(atom.packages.loadPackage).toHaveBeenCalledWith("deferred-package");
+      expect(atom.packages.activatePackage).toHaveBeenCalledWith("deferred-package");
+      // Returns synchronously — it must not await the (never-resolving) activation.
+      expect(result).toBeUndefined();
+    });
   });
 
   describe("::packageHasSettings", function () {

@@ -536,18 +536,13 @@ module.exports = class PackageManager {
         await this.unload(name);
         return { wasActive };
       },
-      afterSwap: async (name, metadata) => {
-        atom.packages.loadPackage(name);
-        if (!metadata.theme && !atom.packages.isPackageDisabled(name)) {
-          await atom.packages.activatePackage(name);
-        }
-      },
+      afterSwap: async (name, metadata) => this.activateInstalledPackage(name, metadata),
       afterRollback: async (name, { wasActive } = {}) => {
         if (atom.packages.isPackageActive(name)) await atom.packages.deactivatePackage(name);
         if (atom.packages.isPackageLoaded(name)) atom.packages.unloadPackage(name);
         atom.packages.loadPackage(name);
         if (wasActive && !atom.packages.isPackageDisabled(name)) {
-          await atom.packages.activatePackage(name);
+          atom.packages.activatePackage(name).catch(() => {});
         }
       },
     });
@@ -558,6 +553,18 @@ module.exports = class PackageManager {
       gitUrlInfo: pack.gitUrlInfo,
       apmInstallSource: installed.metadata.apmInstallSource,
     });
+  }
+
+  // Loads and (for a non-theme, non-disabled package) activates a freshly
+  // installed package. Activation is fire-and-forget on purpose: a package that
+  // defers activation (activationCommands/activationHooks) only resolves
+  // activatePackage once its trigger fires, so awaiting it would hang the
+  // install until then — leaving the swapped files unusable until a restart.
+  activateInstalledPackage(name, metadata) {
+    atom.packages.loadPackage(name);
+    if (!metadata.theme && !atom.packages.isPackageDisabled(name)) {
+      atom.packages.activatePackage(name).catch(() => {});
+    }
   }
 
   getLocalPackages() {
