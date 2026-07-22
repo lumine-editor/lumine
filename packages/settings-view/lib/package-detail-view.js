@@ -166,7 +166,10 @@ export default class PackageDetailView {
         this.pack.metadata,
         this.settingsView,
         this.packageManager,
-        { onSettingsView: true },
+        {
+          onSettingsView: true,
+          onPackUpdated: (updatedPack) => this.applySelectedRef(updatedPack),
+        },
       );
       this.refs.packageCardParent.replaceChild(this.packageCard.element, this.refs.loadingMessage);
     }
@@ -352,7 +355,10 @@ export default class PackageDetailView {
             settingsView={this.settingsView}
             packageManager={this.packageManager}
             metadata={this.pack.metadata}
-            options={{ onSettingsView: true }}
+            options={{
+              onSettingsView: true,
+              onPackUpdated: (updatedPack) => this.applySelectedRef(updatedPack),
+            }}
           />
         </div>
       );
@@ -495,6 +501,31 @@ export default class PackageDetailView {
     }
 
     this.renderReadme();
+  }
+
+  // The embedded card changed its selected ref. Reflect the new commit in the
+  // detail view and re-fetch the README for that exact commit, since a README
+  // belongs to the version it ships with.
+  applySelectedRef(pack) {
+    if (!this.pack || !this.pack.metadata) return;
+    const meta = this.pack.metadata;
+    const sha = pack.resolvedSha || pack.latestSha || null;
+    const shaChanged = !!sha && sha !== meta.resolvedSha;
+    if (pack.selectedRef) meta.selectedRef = pack.selectedRef;
+    if (pack.originKey) meta.originKey = pack.originKey;
+    if (pack.version != null) meta.version = pack.version;
+    if (sha) meta.resolvedSha = sha;
+    if (pack.name && pack.name !== this.pack.name) {
+      this.pack.name = pack.name;
+      meta.name = pack.name;
+      this.refs.title.textContent = _.undasherize(_.uncamelcase(pack.name));
+    }
+    if (shaChanged) {
+      meta.readme = undefined;
+      meta.readmeSource = undefined;
+      this.readmeRequested = false;
+      this.renderReadme();
+    }
   }
 
   renderReadme() {

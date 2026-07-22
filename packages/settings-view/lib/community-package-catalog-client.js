@@ -83,19 +83,15 @@ function normalizeCatalogSource(source) {
   const value = String(source || "")
     .trim()
     .replace(/\/+$/, "");
-  if (!value) throw new Error("Enter a catalog repository or sources.json URL.");
-  if (/index\.json(?:[?#].*)?$/i.test(value)) {
-    throw new Error("Legacy index.json catalogs are not supported; configure sources.json.");
-  }
+  if (!value) throw new Error("Enter a catalog repository or index.json URL.");
 
   if (/^file:\/\//i.test(value)) {
     const filePath = fileURLToPath(value);
-    return pathToFileURL(
-      filePath.endsWith(".json") ? filePath : path.join(filePath, "sources.json"),
-    ).href;
+    return pathToFileURL(filePath.endsWith(".json") ? filePath : path.join(filePath, "index.json"))
+      .href;
   }
   if (path.isAbsolute(value)) {
-    const filePath = value.endsWith(".json") ? value : path.join(value, "sources.json");
+    const filePath = value.endsWith(".json") ? value : path.join(value, "index.json");
     return pathToFileURL(filePath).href;
   }
 
@@ -107,16 +103,16 @@ function normalizeCatalogSource(source) {
     shorthand[2] !== "." &&
     shorthand[2] !== ".."
   ) {
-    return `https://raw.githubusercontent.com/${shorthand[1]}/${shorthand[2]}/main/sources.json`;
+    return `https://raw.githubusercontent.com/${shorthand[1]}/${shorthand[2]}/main/index.json`;
   }
   const github = value.match(/^https:\/\/github\.com\/([\w.-]+)\/([\w.-]+?)(?:\.git)?$/i);
   if (github) {
-    return `https://raw.githubusercontent.com/${github[1]}/${github[2]}/main/sources.json`;
+    return `https://raw.githubusercontent.com/${github[1]}/${github[2]}/main/index.json`;
   }
   if (/^https:\/\//i.test(value)) {
     const url = new URL(value);
     if (url.username || url.password) throw new Error("Catalog URLs must not contain credentials.");
-    return value.endsWith(".json") ? value : `${value}/sources.json`;
+    return value.endsWith(".json") ? value : `${value}/index.json`;
   }
   throw new Error("Catalog sources must be owner/repo, a public HTTPS URL, or a local file.");
 }
@@ -322,7 +318,9 @@ module.exports = class CommunityPackageCatalogClient {
   validate(value, source = null) {
     if (!Array.isArray(value)) {
       if (value && value.schemaVersion === 1 && Array.isArray(value.packages)) {
-        throw new Error("Legacy index.json catalogs are not supported; use a sources.json array.");
+        throw new Error(
+          "The old metadata catalog format is not supported; index.json must be a JSON array of Git sources.",
+        );
       }
       throw new Error("Community package catalog must be a JSON array of Git sources.");
     }
@@ -479,6 +477,32 @@ module.exports = class CommunityPackageCatalogClient {
     const updated = { ...pack, refs: { ...pack.refs, branches: refs.branches } };
     this.updateCachedPackage(updated);
     return updated;
+  }
+
+  // The Git source to list refs from. An installed fork's package.json
+  // `repository` may point upstream, so prefer the install receipt's origin.
+  repositoryForPack(pack) {
+    const install = pack.apmInstallSource;
+    if (install && install.type === "git" && install.repository) return install.repository;
+    return pack.installSource || pack.repository;
+  }
+
+  // Lists tags + default branch for a card that has no ref index yet (an
+  // installed package). Used to populate the version selector on demand.
+  async loadRefs(pack) {
+    const source = this.repositoryForPack(pack);
+    const host = hostForRepository(source);
+    const index = await this.gitQueue.add(() => this.listRefs(source, false), host);
+    return {
+      ...pack,
+      refs: {
+        defaultBranch: index.defaultBranch,
+        headSha: index.headSha,
+        latestStable: index.latestStable,
+        tags: index.tags,
+        branches: null,
+      },
+    };
   }
 
   async hydrateSource(source, catalogSource = "external") {

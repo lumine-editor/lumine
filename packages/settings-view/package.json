@@ -13,13 +13,13 @@
     "communityPackageCatalogs": {
       "order": 1,
       "title": "Community Package Catalogs",
-      "description": "Ordered repositories or sources.json URLs containing untrusted lists of Git repositories. Package metadata is fetched directly by Lumine.",
+      "description": "Ordered repositories or index.json URLs containing untrusted lists of Git repositories. Package metadata is fetched directly by Lumine.",
       "type": "array",
       "items": {
         "type": "string"
       },
       "default": [
-        "https://raw.githubusercontent.com/lumine-code/packages/main/sources.json"
+        "https://raw.githubusercontent.com/lumine-code/packages/main/index.json"
       ]
     },
     "includePulsarPackageResults": {

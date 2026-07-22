@@ -105,7 +105,7 @@ describe("PackageCard", function () {
     });
   });
 
-  it("does not query the legacy avatar API for a hydrated community card", function () {
+  it("loads the author avatar for a hydrated community card", function () {
     setPackageStatusSpies({ installed: false, disabled: false });
     const client = { avatar: jasmine.createSpy("avatar") };
     spyOn(packageManager, "getClient").andReturn(client);
@@ -121,7 +121,10 @@ describe("PackageCard", function () {
       packageManager,
     );
 
-    expect(client.avatar).not.toHaveBeenCalled();
+    // The avatar comes from the author's GitHub avatar URL by owner login, not
+    // the package registry, so catalog cards show it too.
+    expect(client.avatar).toHaveBeenCalled();
+    expect(client.avatar.mostRecentCall.args[0]).toBe("owner");
   });
 
   describe("directory name mismatch", function () {
@@ -223,7 +226,7 @@ describe("PackageCard", function () {
   });
 
   describe("Git ref selection", function () {
-    it("shows virtual latest/default choices plus every cached tag and branch", function () {
+    it("lists every cached tag and the default branch as version choices", function () {
       setPackageStatusSpies({ installed: false, disabled: false });
       card = new PackageCard(
         {
@@ -242,24 +245,14 @@ describe("PackageCard", function () {
               { name: "v2.0.0", sha: "a".repeat(40) },
               { name: "nightly", sha: "b".repeat(40) },
             ],
-            branches: [
-              { name: "main", sha: "a".repeat(40) },
-              { name: "Next", sha: "b".repeat(40) },
-            ],
           },
         },
         new SettingsView(),
         packageManager,
       );
-      const labels = Array.from(card.refs.refSelector.options, ({ textContent }) => textContent);
-      expect(labels).toEqual([
-        "Latest stable — v2.0.0",
-        "Default branch — main",
-        "Tag — v2.0.0",
-        "Tag — nightly",
-        "Branch — main",
-        "Branch — Next",
-      ]);
+      const labels = Array.from(card.refs.versionValue.options, ({ textContent }) => textContent);
+      expect(labels).toEqual(["v2.0.0", "nightly", "main (branch)"]);
+      expect(card.refs.versionValue.value).toBe("tag:v2.0.0");
     });
 
     it("blocks a ref whose manifest renamed an already-installed origin", function () {
@@ -342,10 +335,11 @@ describe("PackageCard", function () {
       packageManager,
     );
 
-    const provenance = card.element.querySelector(".package-catalog-provenance").textContent;
-    expect(provenance).toContain("first/catalog");
-    expect(provenance).toContain("second/catalog (branch:Next)");
-    expect(provenance).toContain("first catalog wins");
+    // Catalog provenance now lives in the repository hover tooltip.
+    const tooltip = card.catalogTooltipHtml();
+    expect(tooltip).toContain("first/catalog");
+    expect(tooltip).toContain("second/catalog (branch:Next)");
+    expect(tooltip).toContain("first catalog wins");
   });
 
   it("disables install with a hover note when no compatible version exists", function () {

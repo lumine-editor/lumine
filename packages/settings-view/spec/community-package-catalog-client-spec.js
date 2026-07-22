@@ -66,17 +66,19 @@ function createFetch(catalogs = {}) {
 }
 
 describe("CommunityPackageCatalogClient", function () {
-  it("normalizes sources.json locations and rejects legacy indexes", function () {
+  it("normalizes index.json catalog locations", function () {
     expect(normalizeCatalogSource("owner/catalog")).toBe(
-      "https://raw.githubusercontent.com/owner/catalog/main/sources.json",
+      "https://raw.githubusercontent.com/owner/catalog/main/index.json",
     );
     expect(normalizeCatalogSource("https://github.com/owner/catalog.git")).toBe(
-      "https://raw.githubusercontent.com/owner/catalog/main/sources.json",
+      "https://raw.githubusercontent.com/owner/catalog/main/index.json",
     );
     expect(normalizeCatalogSource("https://catalog.example/community")).toBe(
-      "https://catalog.example/community/sources.json",
+      "https://catalog.example/community/index.json",
     );
-    expect(() => normalizeCatalogSource("https://example.test/index.json")).toThrow();
+    expect(normalizeCatalogSource("https://example.test/index.json")).toBe(
+      "https://example.test/index.json",
+    );
   });
 
   it("accepts only source strings and rejects the old metadata schema", function () {
@@ -277,7 +279,7 @@ describe("CommunityPackageCatalogClient", function () {
         .then((catalog) => {
           expect(catalog.packages[0].name).toBe("sample-package");
           expect(catalog.pendingSources).toEqual([
-            "https://raw.githubusercontent.com/new/catalog/main/sources.json",
+            "https://raw.githubusercontent.com/new/catalog/main/index.json",
           ]);
         }),
     );

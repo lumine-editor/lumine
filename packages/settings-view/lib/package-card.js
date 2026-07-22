@@ -17,6 +17,21 @@ import {
   getInstalledPackageMetadata,
 } from "./utils";
 
+function escapeHtml(text) {
+  return String(text).replace(
+    /[&<>"']/g,
+    (char) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[char],
+  );
+}
+
+function stripLeadingV(value) {
+  return /^v\d/.test(value) ? value.slice(1) : value;
+}
+
+function updatePolicyForVersionSelector(selector) {
+  return selector.type === "branch" || selector.type === "default" ? "branch" : "pinned";
+}
+
 export default class PackageCard {
   constructor(pack, settingsView, packageManager, options = {}) {
     this.pack = pack;
@@ -110,9 +125,23 @@ export default class PackageCard {
               {displayName}
             </a>
             <span className="package-version">
-              <span ref="versionValue" className="value">
-                {this.pack.version == null ? "" : String(this.pack.version)}
-              </span>
+              {this.canSelectVersion() ? (
+                <select
+                  ref="versionValue"
+                  className="value package-version-select"
+                  value={this.selectedVersionValue()}
+                  disabled={this.pack.status === "validating"}
+                  onclick={(event) => event.stopPropagation()}
+                  onfocus={this.loadVersionRefs.bind(this)}
+                  onchange={this.didChangeRef.bind(this)}
+                >
+                  {this.versionOptions()}
+                </select>
+              ) : (
+                <span ref="versionValue" className="value">
+                  {this.pack.version == null ? "" : String(this.pack.version)}
+                </span>
+              )}
             </span>
             {repoReference ? (
               <a ref="repoLink" className="package-repo">
@@ -120,46 +149,9 @@ export default class PackageCard {
               </a>
             ) : null}
           </h4>
-          {this.pack.refs ? (
-            <div className="package-ref-controls" onclick={(event) => event.stopPropagation()}>
-              <select
-                ref="refSelector"
-                className="form-control"
-                value={this.selectedRefValue()}
-                disabled={this.pack.status === "validating"}
-                onfocus={this.loadBranches.bind(this)}
-                onchange={this.didChangeRef.bind(this)}
-              >
-                {this.refOptions()}
-              </select>
-              <input
-                ref="commitInput"
-                className="input-text"
-                type="text"
-                placeholder="40-character commit SHA"
-                onclick={(event) => event.stopPropagation()}
-                onkeydown={this.didConfirmCommit.bind(this)}
-              />
-            </div>
-          ) : null}
           <span ref="packageDescription" className="package-description">
             {description}
           </span>
-          {this.pack.originKey ? (
-            <span className={`package-catalog-status status-${this.pack.status || "ready"}`}>
-              {this.pack.originKey}
-              {this.pack.resolvedSha ? ` · ${this.pack.resolvedSha.slice(0, 8)}` : ""}
-              {(this.pack.catalogSources || []).length
-                ? ` · ${(this.pack.catalogSources || []).length} catalog(s)`
-                : ""}
-              {this.pack.error ? ` · ${this.pack.error}` : ""}
-            </span>
-          ) : null}
-          {this.catalogProvenanceText() ? (
-            <span className="package-catalog-status package-catalog-provenance">
-              {this.catalogProvenanceText()}
-            </span>
-          ) : null}
           {this.pack.originWarning ? (
             <span className="package-catalog-status status-stale">{this.pack.originWarning}</span>
           ) : null}
@@ -246,9 +238,40 @@ export default class PackageCard {
     );
   }
 
-  selectedRefValue() {
-    const selected = this.pack.selectedRef;
-    return selected ? `${selected.type}:${selected.value || ""}` : "";
+  // A version selector is shown for anything with a Git origin: catalog cards
+  // (which already carry refs) and installed Git packages (which lazily list
+  // their tags on demand). Bundled/local packages keep a plain version label.
+  canSelectVersion() {
+    if (this.pack.refs) return true;
+    return !!(this.pack.apmInstallSource && this.pack.apmInstallSource.type === "git");
+  }
+
+  // The ref the version selector currently reflects: an explicitly selected ref,
+  // otherwise the installed receipt's ref.
+  currentSelector() {
+    if (this.pack.selectedRef) return this.pack.selectedRef;
+    const install = this.pack.apmInstallSource;
+    if (install && install.selector) return install.selector;
+    return null;
+  }
+
+  selectedVersionValue() {
+    const selector = this.currentSelector();
+    if (!selector) return "";
+    if (selector.type === "tag" || selector.type === "latest") return `tag:${selector.value}`;
+    if (selector.type === "branch" || selector.type === "default")
+      return `branch:${selector.value}`;
+    if (selector.type === "commit") return `commit:${selector.value}`;
+    return "";
+  }
+
+  selectedVersionLabel() {
+    const selector = this.currentSelector();
+    if (!selector) return this.pack.version == null ? "" : String(this.pack.version);
+    if (selector.type === "commit") return `${String(selector.value || "").substr(0, 8)} (commit)`;
+    if (selector.type === "branch" || selector.type === "default")
+      return `${selector.value} (branch)`;
+    return selector.value;
   }
 
   catalogProvenanceText() {
@@ -270,59 +293,131 @@ export default class PackageCard {
       : "";
   }
 
-  refOptions() {
-    const refs = this.pack.refs || {};
-    const options = [];
-    if (refs.latestStable) {
-      options.push(
-        <option value={`latest:${refs.latestStable.name}`}>
-          {`Latest stable — ${refs.latestStable.name}`}
-        </option>,
-      );
-    }
-    if (refs.defaultBranch) {
-      options.push(
-        <option value={`default:${refs.defaultBranch}`}>
-          {`Default branch — ${refs.defaultBranch}`}
-        </option>,
-      );
-    }
-    for (const tag of refs.tags || []) {
-      options.push(<option value={`tag:${tag.name}`}>{`Tag — ${tag.name}`}</option>);
-    }
-    for (const branch of refs.branches || []) {
-      options.push(<option value={`branch:${branch.name}`}>{`Branch — ${branch.name}`}</option>);
-    }
-    return options;
+  // The catalog details shown on hover over the repository reference: origin,
+  // resolved commit, selected ref, catalog provenance, and validation status.
+  catalogTooltipHtml() {
+    const install = this.pack.apmInstallSource || {};
+    const lines = [];
+    const origin = this.pack.originKey || install.origin;
+    if (origin) lines.push(`Origin: ${origin}`);
+    const sha = this.pack.resolvedSha || install.sha;
+    if (sha) lines.push(`Commit: ${sha.slice(0, 8)}`);
+    const selector = this.currentSelector();
+    if (selector && selector.value) lines.push(`Ref: ${selector.type} ${selector.value}`);
+    const provenance = this.catalogProvenanceText();
+    if (provenance) lines.push(provenance);
+    if (this.pack.status && this.pack.status !== "ready") lines.push(`Status: ${this.pack.status}`);
+    if (this.pack.error) lines.push(this.pack.error);
+    return lines.map((line) => escapeHtml(line)).join("<br>");
   }
 
-  async loadBranches() {
-    if (!this.pack.refs || this.pack.refs.branches) return;
-    try {
-      this.pack = await this.packageManager.getCatalogClient().loadBranches(this.pack);
-      await etch.update(this);
-    } catch (error) {
-      this.pack = { ...this.pack, status: "stale", error: error.message };
-      await etch.update(this);
+  versionOptionEntries() {
+    const refs = this.pack.refs || {};
+    const entries = [];
+    for (const tag of refs.tags || []) entries.push([`tag:${tag.name}`, tag.name]);
+    if (refs.defaultBranch) {
+      entries.push([`branch:${refs.defaultBranch}`, `${refs.defaultBranch} (branch)`]);
     }
+    const current = this.selectedVersionValue();
+    if (current && !entries.some(([value]) => value === current)) {
+      entries.unshift([current, this.selectedVersionLabel()]);
+    }
+    if (!entries.length) {
+      const label = this.pack.version == null ? "—" : String(this.pack.version);
+      entries.push([current || "version:current", label]);
+    }
+    return entries;
+  }
+
+  versionOptions() {
+    return this.versionOptionEntries().map(([value, label]) => (
+      <option value={value}>{label}</option>
+    ));
+  }
+
+  // Installed cards start without a ref list. The first time the selector is
+  // opened, list the origin's tags and default branch via ls-remote, then
+  // rebuild the <option>s in place — a full re-render would undo the card's
+  // imperative button/state adjustments.
+  async loadVersionRefs() {
+    if (this.pack.refs || this.refsLoading) return;
+    this.refsLoading = true;
+    try {
+      this.pack = await this.packageManager.getCatalogClient().loadRefs(this.pack);
+      this.refreshVersionOptions();
+    } catch {
+      // Leave the version as-is if the refs cannot be listed.
+    } finally {
+      this.refsLoading = false;
+    }
+  }
+
+  refreshVersionOptions() {
+    const select = this.refs.versionValue;
+    if (!select || select.tagName !== "SELECT") return;
+    select.innerHTML = "";
+    for (const [value, label] of this.versionOptionEntries()) {
+      const option = document.createElement("option");
+      option.value = value;
+      option.textContent = label;
+      select.appendChild(option);
+    }
+    select.value = this.selectedVersionValue();
   }
 
   async didChangeRef(event) {
     event.stopPropagation();
-    const [type, ...valueParts] = event.target.value.split(":");
-    await this.selectRef({ type, value: valueParts.join(":") });
+    const raw = event.target.value;
+    const separator = raw.indexOf(":");
+    if (separator === -1) return;
+    const type = raw.slice(0, separator);
+    const value = raw.slice(separator + 1);
+    if (type !== "tag" && type !== "branch" && type !== "commit") return;
+    const selector = { type, value };
+    if (this.isInstalled() && !this.installedOriginDiffers()) {
+      this.applyInstalledVersionSelection(selector);
+    } else {
+      await this.selectRef(selector);
+    }
   }
 
-  async didConfirmCommit(event) {
-    if (event.key !== "Enter") return;
-    event.stopPropagation();
-    const value = event.target.value.trim();
-    if (!/^[0-9a-f]{40}$/i.test(value)) {
-      this.pack = { ...this.pack, status: "error", error: "Enter a complete 40-character SHA." };
-      await etch.update(this);
-      return;
+  // On an installed card, choosing a ref other than the installed one turns the
+  // primary action into "Update to X" targeting that exact commit. Choosing the
+  // installed ref again clears the pending update.
+  applyInstalledVersionSelection(selector) {
+    const refs = this.pack.refs || {};
+    let sha = null;
+    if (selector.type === "tag") {
+      const tag = (refs.tags || []).find((entry) => entry.name === selector.value);
+      sha = tag ? tag.sha : null;
+    } else if (selector.type === "branch") {
+      sha = refs.defaultBranch === selector.value ? refs.headSha : null;
+    } else if (selector.type === "commit") {
+      sha = selector.value;
     }
-    await this.selectRef({ type: "commit", value });
+    const install = this.pack.apmInstallSource || {};
+    const installedSha = install.sha;
+    this.pack.selectedRef = selector;
+    if (sha && installedSha && sha.toLowerCase() === installedSha.toLowerCase()) {
+      this.newVersion = null;
+      this.newSha = null;
+      this.pack.latestSha = installedSha;
+      this.pack.resolvedRef = null;
+      this.pack.updatePolicy = undefined;
+    } else {
+      this.pack.latestSha = sha;
+      this.pack.resolvedRef = selector;
+      this.pack.updatePolicy = updatePolicyForVersionSelector(selector);
+      if (selector.type === "tag") {
+        this.newVersion = stripLeadingV(selector.value);
+        this.newSha = null;
+      } else {
+        this.newSha = sha || null;
+        this.newVersion = null;
+      }
+    }
+    if (this.onPackUpdated) this.onPackUpdated(this.pack);
+    this.updateInterfaceState();
   }
 
   async selectRef(selector) {
@@ -351,7 +446,9 @@ export default class PackageCard {
       // set this.installablePack so that the install action installs the
       // compatible version of the package.
       if (packageVersion) {
-        this.refs.versionValue.textContent = packageVersion;
+        if (this.refs.versionValue.tagName !== "SELECT") {
+          this.refs.versionValue.textContent = packageVersion;
+        }
         if (packageVersion !== this.pack.version) {
           this.refs.versionValue.classList.add("text-warning");
           this.compatibleVersionNote = `Version ${packageVersion} is the latest that is compatible with your Lumine version, not the newest available.`;
@@ -502,6 +599,15 @@ export default class PackageCard {
           this.refs.repoLink.removeEventListener("click", packageNameClickHandler);
         }),
       );
+      // Catalog provenance, origin, resolved commit, and validation status live
+      // in a hover tooltip rather than cluttering the card. A function title
+      // keeps it current as the selected ref changes.
+      this.disposables.add(
+        atom.tooltips.add(this.refs.repoLink, {
+          html: true,
+          title: () => this.catalogTooltipHtml(),
+        }),
+      );
     }
     this.refs.packageName.addEventListener("click", packageNameClickHandler);
     this.disposables.add(
@@ -579,9 +685,6 @@ export default class PackageCard {
   }
 
   loadCachedMetadata() {
-    // Hydrated community cards must not fall back to the legacy registry for
-    // avatars or other same-name metadata.
-    if (this.pack.originKey) return;
     if (repoUrlFromRepository(this.pack.repository) === atom.branding.urlCoreRepo) {
       // Don't hit the web for our bundled packages. Just use the local image.
       let avatarPath = path.join(process.resourcesPath, "lumine.png");
@@ -595,7 +698,11 @@ export default class PackageCard {
       }
       this.refs.avatar.src = `file://${avatarPath}`;
     } else {
-      this.client.avatar(ownerFromRepository(this.pack.repository), (err, avatarPath) => {
+      // The avatar is fetched from the author's GitHub avatar URL by owner
+      // login, never the package registry, so it is safe for catalog cards too.
+      const owner = ownerFromRepository(this.pack.repository);
+      if (!owner) return;
+      this.client.avatar(owner, (err, avatarPath) => {
         if (!err && avatarPath) {
           this.refs.avatar.src = `file://${avatarPath}`;
         }
@@ -604,8 +711,7 @@ export default class PackageCard {
   }
 
   updateInterfaceState() {
-    this.refs.versionValue.textContent =
-      (this.installablePack ? this.installablePack.version : null) || this.pack.version;
+    this.applyVersionDisplay();
 
     // The Git ref indicator describes what is installed, so only show it while
     // the package is actually installed — not on an Install card or after an
@@ -622,6 +728,19 @@ export default class PackageCard {
     this.updateInstalledState();
     this.updateDisabledState();
     this.updateDirectoryNameWarning();
+  }
+
+  // Keeps the version indicator current whether it is a plain label or the
+  // tags/branch <select>.
+  applyVersionDisplay() {
+    const el = this.refs.versionValue;
+    if (!el) return;
+    if (el.tagName === "SELECT") {
+      el.value = this.selectedVersionValue();
+    } else {
+      el.textContent =
+        (this.installablePack ? this.installablePack.version : null) || this.pack.version || "";
+    }
   }
 
   // Warns when a package's install directory does not match its package.json

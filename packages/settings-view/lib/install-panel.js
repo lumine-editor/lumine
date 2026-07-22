@@ -44,7 +44,7 @@ export default class InstallPanel {
     this.refs.searchMessage.style.display = "none";
 
     this.refs.searchEditor.setPlaceholderText("Search community packages or enter owner/repo");
-    this.refs.catalogEditor.setPlaceholderText("owner/catalog or sources.json URL");
+    this.refs.catalogEditor.setPlaceholderText("owner/catalog or index.json URL");
 
     this.disposables.add(atom.tooltips.add(this.refs.addCatalogButton, { title: "Add catalog" }));
     this.disposables.add(

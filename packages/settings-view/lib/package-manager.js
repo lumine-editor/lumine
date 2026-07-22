@@ -229,7 +229,7 @@ module.exports = class PackageManager {
       name: apmInstallSource.source,
       resolvedSha: pack.latestSha || pack.resolvedSha,
       selectedRef: pack.resolvedRef || pack.selectedRef || apmInstallSource.selector,
-      updatePolicy: apmInstallSource.updatePolicy,
+      updatePolicy: pack.updatePolicy || apmInstallSource.updatePolicy,
     });
     this.installGitHubPackage(exactUpdate).then(
       (updatedPack) => {
