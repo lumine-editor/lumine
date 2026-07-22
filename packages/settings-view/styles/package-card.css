@@ -147,18 +147,6 @@
     }
 
     .stats {
-      .stats-item {
-        margin-left: calc(var(--component-padding) * 1.5);
-        height: 26px;
-        display: inline-block;
-        line-height: 24px;
-        vertical-align: top;
-
-        .icon {
-          color: var(--text-color-subtle);
-        }
-      }
-
       .star-box {
         display: inline-block;
         vertical-align: top;

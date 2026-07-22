@@ -148,13 +148,6 @@ export default class PackageCard {
 
     return (
       <div className={cardClasses}>
-        <div ref="statsContainer" className="stats pull-right">
-          <span ref="packageSha" className="stats-item" style={{ display: "none" }}>
-            <span className="icon icon-git-branch" />
-            <span ref="shaValue" className="value" />
-          </span>
-        </div>
-
         <div className="body">
           <h4 className="card-name">
             <a className="package-name" ref="packageName">
@@ -289,6 +282,10 @@ export default class PackageCard {
     if (this.pack.selectedRef) return this.pack.selectedRef;
     const install = this.pack.apmInstallSource;
     if (install && install.selector) return install.selector;
+    // A legacy Git install with no recorded selector is shown as its commit.
+    if (install && install.type === "git" && install.sha) {
+      return { type: "commit", value: install.sha };
+    }
     return null;
   }
 
@@ -302,13 +299,30 @@ export default class PackageCard {
     return "";
   }
 
-  selectedVersionLabel() {
-    const selector = this.currentSelector();
+  // The list-item label for a selector, using the same notation as an install
+  // source: @tag, ~branch, #commit. A branch that is installed also shows its
+  // pinned commit as "#<sha>~branch", since a new commit may arrive on it.
+  labelForSelector(selector) {
     if (!selector) return this.pack.version == null ? "" : String(this.pack.version);
-    if (selector.type === "commit") return `${String(selector.value || "").substr(0, 8)} (commit)`;
-    if (selector.type === "branch" || selector.type === "default")
-      return `${selector.value} (branch)`;
-    return selector.value;
+    if (selector.type === "tag" || selector.type === "latest") return `@${selector.value}`;
+    if (selector.type === "commit") return `#${String(selector.value || "").substr(0, 8)}`;
+    if (selector.type === "branch" || selector.type === "default") {
+      const install = this.pack.apmInstallSource;
+      const installed = install && install.selector;
+      const tracksThisBranch =
+        installed &&
+        (installed.type === "branch" || installed.type === "default") &&
+        installed.value === selector.value;
+      if (tracksThisBranch && install.sha) {
+        return `#${install.sha.substr(0, 8)}~${selector.value}`;
+      }
+      return `~${selector.value}`;
+    }
+    return String(selector.value || "");
+  }
+
+  selectedVersionLabel() {
+    return this.labelForSelector(this.currentSelector());
   }
 
   // Every catalog a package is available from, including the Pulsar registry
@@ -357,9 +371,14 @@ export default class PackageCard {
   versionOptionEntries() {
     const refs = this.pack.refs || {};
     const entries = [];
-    for (const tag of refs.tags || []) entries.push([`tag:${tag.name}`, tag.name]);
+    for (const tag of refs.tags || []) {
+      entries.push([`tag:${tag.name}`, this.labelForSelector({ type: "tag", value: tag.name })]);
+    }
     if (refs.defaultBranch) {
-      entries.push([`branch:${refs.defaultBranch}`, `${refs.defaultBranch} (branch)`]);
+      entries.push([
+        `branch:${refs.defaultBranch}`,
+        this.labelForSelector({ type: "branch", value: refs.defaultBranch }),
+      ]);
     }
     const current = this.selectedVersionValue();
     if (current && !entries.some(([value]) => value === current)) {
@@ -789,17 +808,6 @@ export default class PackageCard {
     if (this.pack.isShadowed) return;
     this.applyVersionDisplay();
 
-    // The Git ref indicator describes what is installed, so only show it while
-    // the package is actually installed — not on an Install card or after an
-    // uninstall.
-    const gitRef = this.isInstalled() ? this.gitInstallRef() : null;
-    if (gitRef) {
-      this.refs.shaValue.textContent = gitRef;
-      this.refs.packageSha.style.display = "";
-    } else {
-      this.refs.packageSha.style.display = "none";
-    }
-
     this.updateSettingsState();
     this.updateInstalledState();
     this.updateDisabledState();
@@ -839,22 +847,6 @@ export default class PackageCard {
       message.textContent = "";
       message.style.display = "none";
     }
-  }
-
-  // The Git ref worth showing beside the version: a branch name or short commit
-  // for branch/commit installs. Tag and latest-tag installs return null because
-  // the version already reflects the installed tag.
-  gitInstallRef() {
-    const install = this.pack.apmInstallSource;
-    if (!install || install.type !== "git") return null;
-    const selector = install.selector;
-    if (selector) {
-      if (selector.type === "tag" || selector.type === "latest") return null;
-      if (selector.type === "branch") return selector.value;
-      if (selector.type === "commit") return (selector.value || install.sha || "").substr(0, 8);
-    }
-    // Legacy installs without a selector fall back to the commit sha.
-    return install.sha ? install.sha.substr(0, 8) : null;
   }
 
   updateSettingsState() {
@@ -1174,7 +1166,6 @@ export default class PackageCard {
 
   displayGitPackageInstallInformation() {
     this.refs.metaUserContainer.remove();
-    this.refs.statsContainer.remove();
     const { gitUrlInfo } = this.pack;
     if (!gitUrlInfo) {
       this.refs.packageDescription.textContent = this.pack.repository || this.pack.name;

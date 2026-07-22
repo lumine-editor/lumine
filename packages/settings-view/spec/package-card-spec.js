@@ -251,7 +251,7 @@ describe("PackageCard", function () {
         packageManager,
       );
       const labels = Array.from(card.refs.versionValue.options, ({ textContent }) => textContent);
-      expect(labels).toEqual(["v2.0.0", "nightly", "main (branch)"]);
+      expect(labels).toEqual(["@v2.0.0", "@nightly", "~main"]);
       expect(card.refs.versionValue.value).toBe("tag:v2.0.0");
     });
 
@@ -495,7 +495,7 @@ describe("PackageCard", function () {
     expect(packageManager.loadCompatiblePackageVersion).not.toHaveBeenCalled();
   });
 
-  describe("the Git install indicator", function () {
+  describe("the Git install version label", function () {
     const gitCard = (apmInstallSource) => {
       setPackageStatusSpies({ installed: true, disabled: false });
       const built = new PackageCard(
@@ -512,72 +512,49 @@ describe("PackageCard", function () {
       return built;
     };
 
-    it("shows the version and hides the commit sha when installed from a tag", function () {
+    it("shows @tag when installed from a tag", function () {
       card = gitCard({
         type: "git",
         selector: { type: "tag", value: "6.0.0" },
         version: "6.0.0",
         sha: "abcdef1234567890",
       });
-      expect(card.refs.versionValue.textContent).toBe("6.0.0");
-      expect(card.refs.packageSha.style.display).toBe("none");
+      expect(card.refs.versionValue.value).toBe("tag:6.0.0");
+      expect(card.refs.versionValue.textContent).toBe("@6.0.0");
     });
 
-    it("hides the commit sha when installed from the latest tag", function () {
+    it("shows @tag when installed from the latest tag", function () {
       card = gitCard({
         type: "git",
         selector: { type: "latest", value: "6.0.0" },
         version: "6.0.0",
         sha: "abcdef1234567890",
       });
-      expect(card.refs.packageSha.style.display).toBe("none");
+      expect(card.refs.versionValue.textContent).toBe("@6.0.0");
     });
 
-    it("shows the branch name when installed from a branch", function () {
+    it("shows #<commit>~branch when installed from a branch", function () {
       card = gitCard({
         type: "git",
         selector: { type: "branch", value: "develop" },
         sha: "abcdef1234567890",
       });
-      expect(card.refs.packageSha.style.display).not.toBe("none");
-      expect(card.refs.shaValue.textContent).toBe("develop");
+      expect(card.refs.versionValue.value).toBe("branch:develop");
+      expect(card.refs.versionValue.textContent).toBe("#abcdef12~develop");
     });
 
-    it("shows the short commit when installed from a commit", function () {
+    it("shows #<commit> when installed from a commit", function () {
       card = gitCard({
         type: "git",
         selector: { type: "commit", value: "abcdef1234567890" },
         sha: "abcdef1234567890",
       });
-      expect(card.refs.shaValue.textContent).toBe("abcdef12");
+      expect(card.refs.versionValue.textContent).toBe("#abcdef12");
     });
 
-    it("falls back to the sha for legacy installs without a selector", function () {
+    it("shows #<commit> for a legacy install without a selector", function () {
       card = gitCard({ type: "git", sha: "abcdef1234567890" });
-      expect(card.refs.packageSha.style.display).not.toBe("none");
-      expect(card.refs.shaValue.textContent).toBe("abcdef12");
-    });
-
-    it("hides the git ref when the package is not installed", function () {
-      // e.g. an Install card, or after uninstalling — the adopted install
-      // source lingers on the pack but must not be shown.
-      setPackageStatusSpies({ installed: false, disabled: false });
-      card = new PackageCard(
-        {
-          name: "git-package",
-          version: "6.0.0",
-          repository: "owner/git-package",
-          apmInstallSource: {
-            type: "git",
-            selector: { type: "commit", value: "2f2d51cc" },
-            sha: "2f2d51cc0000",
-          },
-        },
-        new SettingsView(),
-        packageManager,
-      );
-      jasmine.attachToDOM(card.element);
-      expect(card.refs.packageSha.style.display).toBe("none");
+      expect(card.refs.versionValue.textContent).toBe("#abcdef12");
     });
   });
 
