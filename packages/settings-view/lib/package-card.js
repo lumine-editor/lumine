@@ -567,27 +567,37 @@ export default class PackageCard {
     if (options && options.onSettingsView) {
       this.refs.settingsButton.style.display = "none";
     } else {
-      const clickHandler = (event) => {
-        event.stopPropagation();
+      const openDetail = (initialChapter) => {
         // The installed package merely shares its name — don't link to it.
         if (this.originConflict) return;
         this.settingsView.showPanel(packagePanelKey(this.pack), {
           back: options ? options.back : null,
           pack: this.pack,
+          initialChapter,
         });
       };
 
-      this.element.addEventListener("click", clickHandler);
+      // Clicking the card opens the detail view on its default (README) chapter;
+      // the Settings button opens it straight on the Settings chapter.
+      const cardClickHandler = (event) => {
+        event.stopPropagation();
+        openDetail();
+      };
+      this.element.addEventListener("click", cardClickHandler);
       this.disposables.add(
         new Disposable(() => {
-          this.element.removeEventListener("click", clickHandler);
+          this.element.removeEventListener("click", cardClickHandler);
         }),
       );
 
-      this.refs.settingsButton.addEventListener("click", clickHandler);
+      const settingsClickHandler = (event) => {
+        event.stopPropagation();
+        openDetail("settings");
+      };
+      this.refs.settingsButton.addEventListener("click", settingsClickHandler);
       this.disposables.add(
         new Disposable(() => {
-          this.refs.settingsButton.removeEventListener("click", clickHandler);
+          this.refs.settingsButton.removeEventListener("click", settingsClickHandler);
         }),
       );
     }
