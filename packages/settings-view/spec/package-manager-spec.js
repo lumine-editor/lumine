@@ -213,9 +213,12 @@ describe("PackageManager", function () {
       });
     });
 
-    it("installs and activates GitHub packages with names different from the repo name", function () {
+    it("installs GitHub packages with names different from the repo name", function () {
       const installCallback = jasmine.createSpy("installCallback");
-      spyOn(atom.packages, "activatePackage");
+      spyOn(packageManager, "emitPackageEvent").andCallThrough();
+      // Activation happens once inside installGitHubPackage's afterSwap hook, not
+      // in install(); a second activatePackage here would double-activate.
+      spyOn(atom.packages, "activatePackage").andReturn(Promise.resolve());
       spyOn(packageManager, "installGitHubPackage").andReturn(
         Promise.resolve({
           name: "real-package-name",
@@ -230,7 +233,13 @@ describe("PackageManager", function () {
 
       runs(function () {
         expect(installCallback.argsForCall[0].length).toBe(0);
-        expect(atom.packages.activatePackage).toHaveBeenCalledWith("real-package-name");
+        // install() does not activate (installGitHubPackage is stubbed here, so
+        // its afterSwap never runs) — proving activation isn't done twice.
+        expect(atom.packages.activatePackage).not.toHaveBeenCalled();
+        const installed = packageManager.emitPackageEvent.calls
+          .all()
+          .find((call) => call.args[0] === "installed");
+        expect(installed.args[1].name).toBe("real-package-name");
       });
     });
 

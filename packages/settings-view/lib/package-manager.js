@@ -258,8 +258,7 @@ module.exports = class PackageManager {
   }
 
   install(pack, callback, options = {}) {
-    let { name, version, theme } = pack;
-    const activateOnSuccess = !theme;
+    const { name, version, theme } = pack;
     const nameWithVersion = version != null ? `${name}@${version}` : name;
 
     const errorMessage = `Installing \u201C${nameWithVersion}\u201D failed.`;
@@ -273,18 +272,11 @@ module.exports = class PackageManager {
     this.installGitHubPackage(pack, options).then(
       (installedPack) => {
         pack = _.extend({}, pack, installedPack);
-        ({ name } = pack);
         this.clearOutdatedCache();
-        if (
-          activateOnSuccess &&
-          !atom.packages.isPackageDisabled(name) &&
-          !atom.packages.isPackageActive(name)
-        ) {
-          atom.packages.activatePackage(name);
-        } else if (!atom.packages.isPackageLoaded(name)) {
-          atom.packages.loadPackage(name);
-        }
-
+        // Loading and activation happen exactly once, in installGitHubPackage's
+        // afterSwap hook (see activateInstalledPackage). Doing them again here
+        // would run the package's activate() a second time \u2014 the source of a
+        // freshly-installed package appearing to run twice.
         if (typeof callback === "function") {
           callback();
         }
