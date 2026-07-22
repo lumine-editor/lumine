@@ -383,12 +383,8 @@
   /* Refresh-list button on the right of an installed-packages/themes heading. */
   .section-heading-refresh {
     float: right;
-    font-size: 0.6em;
-    line-height: 1;
-
-    &.icon:before {
-      margin-right: 0;
-    }
+    border: none;
+    background: none;
   }
 
   .section-body {
@@ -704,6 +700,7 @@
       padding-top: var(--component-padding);
 
       .package-license-text {
+        font-size: 1.25em;
         white-space: pre-wrap;
         word-break: break-word;
       }
@@ -813,6 +810,10 @@
         cursor: pointer;
         text-decoration: underline;
       }
+    }
+
+    .startup-time {
+      margin: var(--component-padding) 0 0 0;
     }
   }
 

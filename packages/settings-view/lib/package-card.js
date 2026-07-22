@@ -161,7 +161,7 @@ export default class PackageCard {
                 <span className="package-version-control">
                   <select
                     ref="versionValue"
-                    className="value package-version-select"
+                    className="btn btn-xs value package-version-select"
                     value={this.selectedVersionValue()}
                     disabled={this.pack.status === "validating"}
                     onclick={(event) => event.stopPropagation()}

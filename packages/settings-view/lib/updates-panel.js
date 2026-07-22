@@ -57,7 +57,7 @@ export default class UpdatesPanel {
               </span>
               <button
                 type="button"
-                className="btn btn-default icon icon-sync section-heading-refresh"
+                className="icon-sync section-heading-refresh"
                 title="Check for updates"
                 onclick={() => this.loadUpdates()}
               />

@@ -126,7 +126,7 @@ export default class InstalledPackagesPanel extends CollapsibleSectionPanel {
               </span>
               <button
                 type="button"
-                className="btn btn-default icon icon-sync section-heading-refresh"
+                className="icon-sync section-heading-refresh"
                 title="Refresh list"
                 onclick={() => this.loadPackages()}
               />

@@ -310,8 +310,7 @@ export default class PackageDetailView {
       button.className = `btn btn-default icon ${meta.icon}`;
       button.classList.toggle("selected", key === this.activeChapter);
       button.dataset.chapterTab = key;
-      button.title = meta.label;
-      button.setAttribute("aria-label", meta.label);
+      button.innerHTML = meta.label;
       this.refs.chapterTabs.appendChild(button);
     }
     // README and License are always present, so the tab bar is always shown.
@@ -436,11 +435,6 @@ export default class PackageDetailView {
         <div className="panels-item">
           <section className="section">
             <form className="section-container package-detail-view">
-              <p
-                ref="startupTime"
-                className="text icon icon-dashboard startup-time hidden"
-                tabIndex="-1"
-              />
 
               <div className="container package-container">{packageCardView}</div>
 
@@ -462,6 +456,12 @@ export default class PackageDetailView {
 
                 <div ref="chapterTabs" className="btn-group package-chapter-tabs" />
               </div>
+
+              <p
+                ref="startupTime"
+                className="text icon icon-dashboard startup-time hidden"
+                tabIndex="-1"
+              />
 
               <div ref="errors" />
             </form>

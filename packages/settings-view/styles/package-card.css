@@ -80,7 +80,6 @@
 
     /* The repository reference sits next to the avatar (in place of the author). */
     .package-repo {
-      font-size: 0.8em;
       font-weight: normal;
       color: var(--text-color-subtle);
       margin-left: var(--component-padding);
@@ -230,13 +229,10 @@
 
       .avatar {
         border-radius: var(--component-border-radius);
-        height: 24px;
-        width: 24px;
+        height: 16px;
+        width: 16px;
         display: inline-block;
         vertical-align: middle;
-        /* Transparent so logo avatars (e.g. the Lumine mark) aren't boxed in a
-           grey square — matches the bundled packages shown in Packages/Themes. */
-        background-color: transparent;
       }
 
       .author {
