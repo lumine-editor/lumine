@@ -1,4 +1,5 @@
 "use strict";
+const path = require("path");
 const SQL = require("./sql");
 
 module.exports = class StateStore {
@@ -57,7 +58,7 @@ module.exports = class StateStore {
       throw new Error(`state-store: Must initialize with configDirPath`);
     }
     this.sql ??= new SQL(this.databaseName, this.version, {
-      storagePath: this.configDirPath,
+      storagePath: path.join(this.configDirPath, "storage"),
     });
     return this.sql;
   }

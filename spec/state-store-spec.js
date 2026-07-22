@@ -1,5 +1,6 @@
 /** @babel */
 
+const fs = require("fs");
 const path = require("path");
 // Electron 43 ships the synchronous Node SQLite API used by the state store.
 // eslint-disable-next-line n/no-unsupported-features/node-builtins
@@ -66,7 +67,9 @@ describe("StateStore", () => {
     it("reads state from an existing SQLite database", async () => {
       const existingDatabaseName = `${databaseName}-existing`;
       const table = `${existingDatabaseName}${version}`;
-      const databasePath = path.join(atom.getConfigDirPath(), "session-store.db");
+      const storagePath = path.join(atom.getConfigDirPath(), "storage");
+      fs.mkdirSync(storagePath, { recursive: true });
+      const databasePath = path.join(storagePath, "session-store.db");
       const database = new DatabaseSync(databasePath);
       database.exec(`CREATE TABLE IF NOT EXISTS "${table}" (key VARCHAR, value JSON)`);
       database

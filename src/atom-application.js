@@ -36,7 +36,27 @@ const getSocketSecretPath = (applicationVersion) => {
   const { username } = os.userInfo();
   const atomHome = path.resolve(process.env.LUMINE_HOME);
 
+  return path.join(atomHome, "storage", `socket-secret-${username}-${applicationVersion}`);
+};
+
+// Pre-`storage/` location of the socket secret. Kept only so that upgrading from
+// an older build can clean up the stray file it left at the config root.
+const getLegacySocketSecretPath = (applicationVersion) => {
+  const { username } = os.userInfo();
+  const atomHome = path.resolve(process.env.LUMINE_HOME);
+
   return path.join(atomHome, `.lumine-socket-secret-${username}-${applicationVersion}`);
+};
+
+const unlinkIfExists = (targetPath) => {
+  if (!fs.existsSync(targetPath)) return;
+  try {
+    fs.unlinkSync(targetPath);
+  } catch (error) {
+    // Ignore ENOENT in case the file was deleted between the exists check and
+    // the call to unlink sync. This occurred occasionally on CI.
+    if (error.code !== "ENOENT") throw error;
+  }
 };
 
 const getSocketPath = (socketSecret) => {
@@ -517,17 +537,10 @@ module.exports = class AtomApplication extends EventEmitter {
     }
     await this.socketSecretPromise;
 
-    const socketSecretPath = getSocketSecretPath(this.version);
-
-    if (fs.existsSync(socketSecretPath)) {
-      try {
-        fs.unlinkSync(socketSecretPath);
-      } catch (error) {
-        // Ignore ENOENT errors in case the file was deleted between the exists
-        // check and the call to unlink sync.
-        if (error.code !== "ENOENT") throw error;
-      }
-    }
+    unlinkIfExists(getSocketSecretPath(this.version));
+    // Remove the pre-`storage/` file too, so upgrading doesn't leave a stray
+    // secret at the config root.
+    unlinkIfExists(getLegacySocketSecretPath(this.version));
   }
 
   // Registers basic application commands, non-idempotent.
