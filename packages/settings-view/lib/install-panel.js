@@ -559,7 +559,12 @@ export default class InstallPanel {
     if (refresh) {
       this.refs.fetchButton.classList.add("is-checking");
       this.refs.cancelFetchButton.style.display = "";
-      this.refs.catalogProgress.textContent = `Refreshing ${this.catalogPackages.length} cached package(s)…`;
+      // Erase the current catalog list and its per-repository error tooltip; the
+      // list is rebuilt incrementally as records arrive.
+      this.catalogPackages = [];
+      this.updateCatalogProgressTooltip([]);
+      this.refs.catalogProgress.textContent = "Fetching…";
+      this.renderBrowseList();
     }
 
     const progressive = new Map(this.catalogPackages.map((pack) => [packageOrigin(pack), pack]));

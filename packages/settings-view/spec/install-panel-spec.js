@@ -253,6 +253,38 @@ describe("InstallPanel", function () {
     );
   });
 
+  it("erases the current catalog list when a fetch starts, then loads incrementally", function () {
+    panel.catalogPackages = [
+      { name: "old-package", repository: "owner/old", installSource: "owner/old" },
+    ];
+    panel.renderBrowseList();
+    expect(panel.refs.browseContainer.querySelectorAll(".package-card").length).toBe(1);
+
+    let listAtFetchStart = null;
+    catalogClient.loadAll.andCallFake((sources, opts) => {
+      // The old list is erased before any records arrive.
+      listAtFetchStart = panel.catalogPackages.slice();
+      opts.onRecord({ name: "new-1", repository: "owner/new-1", installSource: "owner/new-1" });
+      return Promise.resolve({
+        schemaVersion: 2,
+        packages: [
+          { name: "new-1", repository: "owner/new-1", installSource: "owner/new-1" },
+          { name: "new-2", repository: "owner/new-2", installSource: "owner/new-2" },
+        ],
+        errors: [],
+      });
+    });
+
+    panel.refs.fetchButton.click();
+
+    waitsForPromise(() =>
+      panel.catalogPromise.then(() => {
+        expect(listAtFetchStart).toEqual([]);
+        expect(panel.catalogPackages.map(({ name }) => name)).toEqual(["new-1", "new-2"]);
+      }),
+    );
+  });
+
   it("searches all hydrated records but renders at most 50 cards per page", function () {
     panel.catalogPackages = Array.from({ length: 1000 }, (_value, index) => ({
       name: `package-${String(index).padStart(4, "0")}`,
