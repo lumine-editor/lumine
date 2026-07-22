@@ -57,7 +57,20 @@ class NativeWatcher {
         this.state = WATCHER_STATE.RUNNING;
         this.emitter.emit("did-start");
       } catch (error) {
+        // A backend may allocate bookkeeping or worker resources before its
+        // watch request fails. Complete the normal stop lifecycle so manager
+        // and registry listeners release the failed watcher, while preserving
+        // the original startup error for the caller.
+        this.onError(error);
+        this.state = WATCHER_STATE.STOPPING;
+        this.emitter.emit("will-stop");
+        try {
+          await this.doStop();
+        } catch {
+          // Preserve the startup failure as the actionable root cause.
+        }
         this.state = WATCHER_STATE.STOPPED;
+        this.emitter.emit("did-stop");
         throw error;
       }
     })();
@@ -86,13 +99,17 @@ class NativeWatcher {
   //
   // Returns: A {Disposable} to revoke the subscription.
   onDidChange(callback) {
-    this.start();
+    // Startup failures are delivered through `did-error`; consume this
+    // convenience call's promise so the same failure is not also reported as
+    // an unhandled rejection. Callers that need readiness await the logical
+    // PathWatcher's start promise.
+    this.start().catch(() => {});
 
     const sub = this.emitter.on("did-change", callback);
     return new Disposable(() => {
       sub.dispose();
       if (this.emitter.listenerCountForEventName("did-change") === 0) {
-        this.stop();
+        this.stop().catch((error) => this.onError(error));
       }
     });
   }
@@ -151,10 +168,12 @@ class NativeWatcher {
     this.state = WATCHER_STATE.STOPPING;
     this.emitter.emit("will-stop");
 
-    await this.doStop();
-
-    this.state = WATCHER_STATE.STOPPED;
-    this.emitter.emit("did-stop");
+    try {
+      await this.doStop();
+    } finally {
+      this.state = WATCHER_STATE.STOPPED;
+      this.emitter.emit("did-stop");
+    }
   }
 
   doStop() {
@@ -482,12 +501,14 @@ class WorkerProcessWatcher extends NativeWatcher {
   }
 
   async doStop() {
-    let result = await this.send("watcher:unwatch", {
-      normalizedPath: this.normalizedPath,
-      instance: this.id,
-    });
-    this.constructor.unregister(this);
-    return result;
+    try {
+      return await this.send("watcher:unwatch", {
+        normalizedPath: this.normalizedPath,
+        instance: this.id,
+      });
+    } finally {
+      this.constructor.unregister(this);
+    }
   }
 }
 
@@ -663,8 +684,6 @@ class PathWatcher {
     if (this.native) {
       const sub = this.native.onDidChange((events) => this.onNativeEvents(events, callback));
       this.changeCallbacks.set(callback, sub);
-
-      this.native.start();
     } else {
       // Attach to a new native listener and retry
       this.nativeWatcherRegistry.attach(this).then(() => {
@@ -715,6 +734,12 @@ class PathWatcher {
 
     this.subs.add(
       native.onDidError((err) => {
+        if (!native.isRunning()) {
+          // Remove logical ownership before the native watcher's `will-stop`
+          // listeners rebuild any still-owned descendants.
+          this.nativeWatcherRegistry.detach(this);
+          this.rejectStartPromise(err);
+        }
         this.emitter.emit("did-error", err);
       }),
     );
@@ -898,8 +923,13 @@ class PathWatcherManager {
       options && options.recursive === false ? this.nonRecursiveRegistry : this.nativeRegistry;
     const w = new PathWatcher(registry, rootPath, options);
     w.onDidChange(eventCallback);
-    await w.getStartPromise();
-    return w;
+    try {
+      await w.getStartPromise();
+      return w;
+    } catch (error) {
+      w.dispose();
+      throw error;
+    }
   }
 
   // Private: Return a {String} depicting the currently active native watchers.
@@ -1120,4 +1150,4 @@ watchPath.reset = function reset() {
     });
 };
 
-module.exports = { NativeWatcher, watchPath, watchFile, stopAllWatchers };
+module.exports = { NativeWatcher, PathWatcherManager, watchPath, watchFile, stopAllWatchers };

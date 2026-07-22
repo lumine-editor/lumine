@@ -4,7 +4,7 @@ const path = require("path");
 const { promisify } = require("util");
 
 const { CompositeDisposable } = require("event-kit");
-const { NativeWatcher, watchPath } = require("../src/path-watcher");
+const { NativeWatcher, PathWatcherManager, watchPath } = require("../src/path-watcher");
 const { conditionPromise } = require("./helpers/async-spec-helpers");
 
 temp.track();
@@ -36,6 +36,106 @@ describe("NativeWatcher", function () {
 
     expect(didStop).toBe(true);
     expect(watcher.isRunning()).toBe(false);
+  });
+
+  it("completes teardown and reports the original error when startup fails", async function () {
+    const startError = new Error("cannot watch path");
+    let didCleanUp = false;
+    class FailingNativeWatcher extends NativeWatcher {
+      doStart() {
+        return Promise.reject(startError);
+      }
+
+      doStop() {
+        didCleanUp = true;
+        return Promise.resolve();
+      }
+    }
+
+    const watcher = new FailingNativeWatcher("/missing");
+    const reportedErrors = [];
+    const lifecycle = [];
+    watcher.onDidError((error) => reportedErrors.push(error));
+    watcher.onWillStop(() => lifecycle.push("will-stop"));
+    watcher.onDidStop(() => lifecycle.push("did-stop"));
+
+    let caughtError;
+    try {
+      await watcher.start();
+    } catch (error) {
+      caughtError = error;
+    }
+
+    expect(caughtError).toBe(startError);
+    expect(reportedErrors).toEqual([startError]);
+    expect(lifecycle).toEqual(["will-stop", "did-stop"]);
+    expect(didCleanUp).toBe(true);
+    expect(watcher.isRunning()).toBe(false);
+  });
+
+  it("completes its stop lifecycle when backend cleanup fails", async function () {
+    const stopError = new Error("cannot stop watcher");
+    class StopFailingNativeWatcher extends NativeWatcher {
+      doStart() {
+        return Promise.resolve();
+      }
+
+      doStop() {
+        return Promise.reject(stopError);
+      }
+    }
+
+    const watcher = new StopFailingNativeWatcher("/stopping");
+    let didStop = false;
+    watcher.onDidStop(() => {
+      didStop = true;
+    });
+    await watcher.start();
+
+    let caughtError;
+    try {
+      await watcher.stop();
+    } catch (error) {
+      caughtError = error;
+    }
+
+    expect(caughtError).toBe(stopError);
+    expect(didStop).toBe(true);
+    expect(watcher.isRunning()).toBe(false);
+  });
+});
+
+describe("PathWatcherManager", function () {
+  it("rejects and disposes a logical watcher when its native watcher cannot start", async function () {
+    const startError = new Error("cannot watch path");
+    class FailingNativeWatcher extends NativeWatcher {
+      doStart() {
+        return Promise.reject(startError);
+      }
+    }
+
+    const native = new FailingNativeWatcher("/missing");
+    let logicalWatcher;
+    const registry = {
+      attach(watcher) {
+        logicalWatcher = watcher;
+        watcher.attachToNative(native);
+        return Promise.resolve();
+      },
+      detach: jasmine.createSpy("detach"),
+    };
+    const manager = new PathWatcherManager();
+    manager.nativeRegistry = registry;
+
+    let caughtError;
+    try {
+      await manager.createWatcher("/missing", () => {}, {});
+    } catch (error) {
+      caughtError = error;
+    }
+
+    expect(caughtError).toBe(startError);
+    expect(registry.detach).toHaveBeenCalledWith(logicalWatcher);
   });
 });
 
