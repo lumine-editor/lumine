@@ -100,6 +100,7 @@ export default class SettingsView {
               Open Config Folder
             </button>
           </div>
+          <div className="config-toc hidden" ref="tableOfContents" />
         </div>
         {/* The tabindex attr below ensures that clicks in a panel item won't
         cause this view to gain focus. This is important because when this view
@@ -477,7 +478,51 @@ export default class SettingsView {
     return true;
   }
 
+  // Renders a table of contents in the sidebar (used by the package detail view
+  // for the current README's headers). Entries are { label, level, onClick }.
+  showTableOfContents(entries) {
+    const container = this.refs.tableOfContents;
+    if (!container) return;
+    container.innerHTML = "";
+    if (!entries || !entries.length) {
+      container.classList.add("hidden");
+      return;
+    }
+
+    const heading = document.createElement("div");
+    heading.className = "config-toc-heading";
+    heading.textContent = "On this page";
+    container.appendChild(heading);
+
+    const list = document.createElement("ul");
+    list.className = "config-toc-list";
+    for (const entry of entries) {
+      const item = document.createElement("li");
+      item.className = `config-toc-item config-toc-level-${entry.level}`;
+      const link = document.createElement("a");
+      link.textContent = entry.label;
+      link.title = entry.label;
+      link.addEventListener("click", (event) => {
+        event.preventDefault();
+        entry.onClick();
+      });
+      item.appendChild(link);
+      list.appendChild(item);
+    }
+    container.appendChild(list);
+    container.classList.remove("hidden");
+  }
+
+  clearTableOfContents() {
+    const container = this.refs.tableOfContents;
+    if (!container) return;
+    container.innerHTML = "";
+    container.classList.add("hidden");
+  }
+
   appendPanel(panel, options) {
+    // A new panel owns the sidebar TOC; the detail view republishes on show().
+    this.clearTableOfContents();
     for (let i = 0; i < this.refs.panels.children.length; i++) {
       this.refs.panels.children[i].style.display = "none";
     }

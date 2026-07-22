@@ -500,6 +500,57 @@
       text-align: center;
     }
 
+    /* README table of contents, published by the package detail view. */
+    .config-toc {
+      padding: var(--component-padding);
+      border-top: 1px solid var(--base-border-color);
+
+      .config-toc-heading {
+        margin-bottom: calc(var(--component-padding) / 2);
+        font-size: 0.9em;
+        font-weight: bold;
+        text-transform: uppercase;
+        color: var(--text-color-subtle);
+      }
+
+      .config-toc-list {
+        margin: 0;
+        padding: 0;
+        list-style: none;
+      }
+
+      .config-toc-item > a {
+        display: block;
+        padding: 2px 0;
+        color: var(--text-color);
+        cursor: pointer;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+
+        &:hover {
+          color: var(--text-color-highlight);
+          text-decoration: underline;
+        }
+      }
+
+      .config-toc-level-2 {
+        padding-left: 1em;
+      }
+      .config-toc-level-3 {
+        padding-left: 2em;
+      }
+      .config-toc-level-4 {
+        padding-left: 3em;
+      }
+      .config-toc-level-5 {
+        padding-left: 4em;
+      }
+      .config-toc-level-6 {
+        padding-left: 5em;
+      }
+    }
+
     .panels-packages {
       flex-grow: 1;
       overflow: auto;
