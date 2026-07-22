@@ -4,10 +4,40 @@ const path = require("path");
 const { promisify } = require("util");
 
 const { CompositeDisposable } = require("event-kit");
-const { watchPath } = require("../src/path-watcher");
+const { NativeWatcher, watchPath } = require("../src/path-watcher");
 const { conditionPromise } = require("./helpers/async-spec-helpers");
 
 temp.track();
+
+describe("NativeWatcher", function () {
+  it("finishes stopping when stop is requested during startup", async function () {
+    let finishStart;
+    let didStop = false;
+    class DelayedNativeWatcher extends NativeWatcher {
+      doStart() {
+        return new Promise((resolve) => {
+          finishStart = resolve;
+        });
+      }
+
+      doStop() {
+        didStop = true;
+        return Promise.resolve();
+      }
+    }
+
+    const watcher = new DelayedNativeWatcher("/delayed");
+    watcher.start();
+    const stopPromise = watcher.stop();
+
+    expect(didStop).toBe(false);
+    finishStart();
+    await stopPromise;
+
+    expect(didStop).toBe(true);
+    expect(watcher.isRunning()).toBe(false);
+  });
+});
 
 function wait(ms) {
   return new Promise((r) => setTimeout(r, ms));

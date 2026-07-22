@@ -27,10 +27,11 @@ class RegistryTree {
   // * `createNative` {Function} used to construct new native watchers. It
   //   should accept an absolute path as an argument and return a new
   //   {NativeWatcher}.
-  constructor(basePathSegments, createNative) {
+  constructor(basePathSegments, createNative, getChildPaths) {
     this.basePathSegments = basePathSegments;
     this.root = new RegistryNode();
     this.createNative = createNative;
+    this.getChildPaths = getChildPaths;
   }
 
   // Private: Identify the native watcher that should be used to produce events
@@ -51,7 +52,17 @@ class RegistryTree {
 
       const sub = native.onWillStop(() => {
         sub.dispose();
-        this.root = this.root.remove(pathSegments, this.createNative) || new RegistryNode();
+        const childPaths = this.getChildPaths(absolutePathSegments);
+        this.root = this.root.remove(pathSegments) || new RegistryNode();
+
+        // Rebuild still-requested descendants in this tree. Building a nested
+        // RegistryTree here would leave its future removal callbacks updating
+        // a detached root reference, which retains empty structural nodes.
+        for (const childPath of childPaths) {
+          this.add(pathSegments.concat(childPath), (replacement, attachmentPath) => {
+            native.reattachTo(replacement, attachmentPath);
+          });
+        }
       });
 
       attachToNative(native, absolutePath);
@@ -75,8 +86,10 @@ class RegistryTree {
           const childNode = children[i].node;
           const childNative = childNode.getNativeWatcher();
           childNative.reattachTo(newNative, absolutePath);
-          childNative.dispose();
-          childNative.stop();
+          childNative.stop().then(
+            () => childNative.dispose(),
+            () => childNative.dispose(),
+          );
         }
       },
       missing: () => attachToNew([]),
@@ -86,6 +99,15 @@ class RegistryTree {
   // Private: Access the root node of the tree.
   getRoot() {
     return this.root;
+  }
+
+  release(pathSegments, pathStillWatched) {
+    if (pathStillWatched) return;
+    this.root.lookup(pathSegments).when({
+      parent: (parent, remaining) => parent.removeChildPath(remaining),
+      children: () => {},
+      missing: () => {},
+    });
   }
 
   // Private: Return a {String} representation of this tree's structure for diagnostics and testing.
@@ -148,12 +170,10 @@ class RegistryNode {
   // Private: Remove a {RegistryWatcherNode} by its exact watched directory.
   //
   // * `pathSegments` absolute pre-split filesystem path of the node to remove.
-  // * `createSplitNative` callback to be invoked with each child path segment {Array} if the {RegistryWatcherNode}
-  //   is split into child watchers rather than removed outright. See {RegistryWatcherNode.remove}.
   //
   // Returns: The root of a new tree with the {RegistryWatcherNode} removed. Callers should replace their node
   // references with the returned value.
-  remove(pathSegments, createSplitNative) {
+  remove(pathSegments) {
     if (pathSegments.length === 0) {
       // Attempt to remove a path with child watchers. Do nothing.
       return this;
@@ -167,7 +187,7 @@ class RegistryNode {
     }
 
     // Recurse
-    const newChild = child.remove(pathSegments.slice(1), createSplitNative);
+    const newChild = child.remove(pathSegments.slice(1));
     if (newChild === null) {
       delete this.children[pathKey];
     } else {
@@ -230,8 +250,8 @@ class RegistryWatcherNode {
     }
   }
 
-  // Private: Assume responsibility for a new child path. If this node is removed, it will instead
-  // split into a subtree with a new {RegistryWatcherNode} for each child path.
+  // Private: Record responsibility for a new child path for diagnostics. Active watcher ownership in
+  // {NativeWatcherRegistry.watchedPaths} is authoritative when this native watcher is replaced.
   //
   // * `childPathSegments` the {Array} of path segments between this node's directory and the watched
   //   child directory.
@@ -247,8 +267,7 @@ class RegistryWatcherNode {
     this.childPaths.add(path.join(...childPathSegments));
   }
 
-  // Private: Stop assuming responsibility for a previously assigned child path. If this node is
-  // removed, the named child path will no longer be allocated a {RegistryWatcherNode}.
+  // Private: Stop recording responsibility for a previously assigned child path.
   //
   // * `childPathSegments` the {Array} of path segments between this node's directory and the no longer
   //   watched child directory.
@@ -278,34 +297,18 @@ class RegistryWatcherNode {
     return new ParentResult(this, pathSegments);
   }
 
-  // Private: Remove this leaf node if the watcher's exact path matches. If this node is covering additional
-  // {Watcher} instances on child paths, it will be split into a subtree.
+  // Private: Remove this leaf node if the watcher's exact path matches. RegistryTree rebuilds any
+  // still-owned descendants after removing this node from the main tree.
   //
   // * `pathSegments` filesystem path of the node to remove.
-  // * `createSplitNative` callback invoked with each {Array} of absolute child path segments to create a native
-  //   watcher on a subtree of this node.
   //
-  // Returns: If `pathSegments` match this watcher's path exactly, returns `null` if this node has no `childPaths`
-  // or a new {RegistryNode} on a newly allocated subtree if it did. If `pathSegments` does not match the watcher's
-  // path, it's an attempt to remove a subnode that doesn't exist, so the remove call has no effect and returns
-  // `this` unaltered.
-  remove(pathSegments, createSplitNative) {
+  // Returns: `null` if `pathSegments` match this watcher's path exactly. If they do not, the remove call has no
+  // effect and returns `this` unaltered.
+  remove(pathSegments) {
     if (pathSegments.length !== 0) {
       return this;
-    } else if (this.childPaths.size > 0) {
-      let newSubTree = new RegistryTree(this.absolutePathSegments, createSplitNative);
-
-      for (const childPath of this.childPaths) {
-        const childPathSegments = childPath.split(path.sep);
-        newSubTree.add(childPathSegments, (native, attachmentPath) => {
-          this.nativeWatcher.reattachTo(native, attachmentPath);
-        });
-      }
-
-      return newSubTree.getRoot();
-    } else {
-      return null;
     }
+    return null;
   }
 
   // Private: Discover this {RegistryWatcherNode} instance.
@@ -417,7 +420,8 @@ class NativeWatcherRegistry {
   // * `createNative` {Function} that will be called with a normalized filesystem path to create a new native
   //   filesystem watcher.
   constructor(createNative) {
-    this.tree = new RegistryTree([], createNative);
+    this.watchedPaths = new Map();
+    this.tree = new RegistryTree([], createNative, (parentPath) => this.getChildPaths(parentPath));
   }
 
   // Private: Attach a watcher to a directory, assigning it a {NativeWatcher}. If a suitable {NativeWatcher} already
@@ -435,10 +439,34 @@ class NativeWatcherRegistry {
     const pathSegments = normalizedDirectory
       .split(path.sep)
       .filter((segment) => segment.length > 0);
+    this.watchedPaths.set(watcher, pathSegments);
 
     this.tree.add(pathSegments, (native, nativePath) => {
       watcher.attachToNative(native, nativePath);
     });
+  }
+
+  detach(watcher) {
+    const pathSegments = this.watchedPaths.get(watcher);
+    if (!pathSegments) return;
+
+    this.watchedPaths.delete(watcher);
+    const pathStillWatched = Array.from(this.watchedPaths.values()).some((candidate) =>
+      pathsEqual(candidate, pathSegments),
+    );
+    this.tree.release(pathSegments, pathStillWatched);
+  }
+
+  getChildPaths(parentPath) {
+    const children = new Map();
+    for (const watchedPath of this.watchedPaths.values()) {
+      if (watchedPath.length <= parentPath.length || !pathStartsWith(watchedPath, parentPath)) {
+        continue;
+      }
+      const relativePath = watchedPath.slice(parentPath.length);
+      children.set(relativePath.join("\0"), relativePath);
+    }
+    return Array.from(children.values()).sort((a, b) => a.length - b.length);
   }
 
   // Private: Generate a visual representation of the currently active watchers managed by this
@@ -448,6 +476,17 @@ class NativeWatcherRegistry {
   print() {
     return this.tree.print();
   }
+}
+
+function pathsEqual(left, right) {
+  return left.length === right.length && pathStartsWith(left, right);
+}
+
+function pathStartsWith(candidate, prefix) {
+  for (let i = 0; i < prefix.length; i++) {
+    if (candidate[i] !== prefix[i]) return false;
+  }
+  return true;
 }
 
 module.exports = { NativeWatcherRegistry };

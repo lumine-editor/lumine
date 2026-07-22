@@ -75,6 +75,7 @@ class MockNative {
   stop() {
     this.stopped = true;
     this.emitter.emit("will-stop");
+    return Promise.resolve();
   }
 }
 
@@ -193,6 +194,36 @@ describe("NativeWatcherRegistry", function () {
     expect(OTHER.disposed).toBe(false);
   });
 
+  it("disposes an adopted native watcher only after its asynchronous stop completes", async function () {
+    const parentDir = absolute("parent");
+    const childDir = path.join(parentDir, "child");
+    const childNative = new MockNative("child");
+    const parentNative = new MockNative("parent");
+    let finishStop;
+    spyOn(childNative, "stop").and.callFake(() => {
+      childNative.stopped = true;
+      childNative.emitter.emit("will-stop");
+      return new Promise((resolve) => {
+        finishStop = resolve;
+      });
+    });
+    createNative = (dir) => {
+      if (dir === childDir) return childNative;
+      if (dir === parentDir) return parentNative;
+      throw new Error(`Unexpected directory ${dir}`);
+    };
+
+    await registry.attach(new MockWatcher(childDir));
+    await registry.attach(new MockWatcher(parentDir));
+
+    expect(childNative.stopped).toBe(true);
+    expect(childNative.disposed).toBe(false);
+
+    finishStop();
+    await Promise.resolve();
+    expect(childNative.disposed).toBe(true);
+  });
+
   describe("removing NativeWatchers", function () {
     it("happens when they stop", async function () {
       const STOPPED = new MockNative("stopped");
@@ -277,6 +308,31 @@ describe("NativeWatcherRegistry", function () {
           children: () => false,
         }),
       ).toBe(true);
+    });
+
+    it("does not recreate a child watcher after every owner has detached", async function () {
+      const parentDir = absolute("parent");
+      const childDir = path.join(parentDir, "child");
+      const parentNative = new MockNative("parent");
+      const created = [];
+      createNative = (dir) => {
+        created.push(dir);
+        if (dir === parentDir) return parentNative;
+        if (dir === childDir) return new MockNative("orphaned-child");
+        throw new Error(`Unexpected directory ${dir}`);
+      };
+
+      const parentWatcher = new MockWatcher(parentDir);
+      const childWatcher = new MockWatcher(childDir);
+      await registry.attach(parentWatcher);
+      await registry.attach(childWatcher);
+
+      registry.detach(parentWatcher);
+      registry.detach(childWatcher);
+      parentNative.stop();
+
+      expect(created).toEqual([parentDir]);
+      expect(registry.print()).toBe("");
     });
 
     it("reassigns new child watchers when a parent watcher is stopped", async function () {

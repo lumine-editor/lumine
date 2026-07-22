@@ -52,10 +52,14 @@ class NativeWatcher {
     this.state = WATCHER_STATE.STARTING;
 
     this.startPromise = (async () => {
-      await this.doStart();
-
-      this.state = WATCHER_STATE.RUNNING;
-      this.emitter.emit("did-start");
+      try {
+        await this.doStart();
+        this.state = WATCHER_STATE.RUNNING;
+        this.emitter.emit("did-start");
+      } catch (error) {
+        this.state = WATCHER_STATE.STOPPED;
+        throw error;
+      }
     })();
     return this.startPromise;
   }
@@ -134,6 +138,13 @@ class NativeWatcher {
   //
   // Has no effect if the watcher is not running.
   async stop() {
+    if (this.state === WATCHER_STATE.STARTING) {
+      try {
+        await this.startPromise;
+      } catch {
+        return;
+      }
+    }
     if (this.state !== WATCHER_STATE.RUNNING) {
       return;
     }
@@ -833,6 +844,7 @@ class PathWatcher {
   // broadcasting events immediately.
   dispose() {
     this.disposing = true;
+    this.nativeWatcherRegistry.detach(this);
     for (const sub of this.changeCallbacks.values()) {
       sub.dispose();
     }
@@ -1108,4 +1120,4 @@ watchPath.reset = function reset() {
     });
 };
 
-module.exports = { watchPath, watchFile, stopAllWatchers };
+module.exports = { NativeWatcher, watchPath, watchFile, stopAllWatchers };
