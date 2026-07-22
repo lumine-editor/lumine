@@ -356,8 +356,8 @@ export default class PackageDetailView {
       button.classList.toggle("selected", button.dataset.chapterTab === key);
     }
     this.applyChapterVisibility();
-    // Start each chapter from the top of the scroll zone.
-    this.refs.sections.scrollTop = 0;
+    // Start each chapter from the top.
+    this.element.scrollTop = 0;
   }
 
   // Whether a chapter's section actually has something to show, so we don't offer
@@ -474,7 +474,7 @@ export default class PackageDetailView {
             </form>
           </section>
 
-          <div ref="sections" className="package-detail-sections" />
+          <div ref="sections" />
         </div>
       </div>
     );
@@ -862,29 +862,28 @@ export default class PackageDetailView {
     return loadTime + activateTime;
   }
 
-  // Only the chapter zone scrolls; the card, actions, and tabs stay pinned above.
   scrollUp() {
-    this.refs.sections.scrollTop -= document.body.offsetHeight / 20;
+    this.element.scrollTop -= document.body.offsetHeight / 20;
   }
 
   scrollDown() {
-    this.refs.sections.scrollTop += document.body.offsetHeight / 20;
+    this.element.scrollTop += document.body.offsetHeight / 20;
   }
 
   pageUp() {
-    this.refs.sections.scrollTop -= this.refs.sections.offsetHeight;
+    this.element.scrollTop -= this.element.offsetHeight;
   }
 
   pageDown() {
-    this.refs.sections.scrollTop += this.refs.sections.offsetHeight;
+    this.element.scrollTop += this.element.offsetHeight;
   }
 
   scrollToTop() {
-    this.refs.sections.scrollTop = 0;
+    this.element.scrollTop = 0;
   }
 
   scrollToBottom() {
-    this.refs.sections.scrollTop = this.refs.sections.scrollHeight;
+    this.element.scrollTop = this.element.scrollHeight;
   }
 }
 

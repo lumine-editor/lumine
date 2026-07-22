@@ -629,25 +629,6 @@
     flex-direction: column;
     height: 100%;
 
-    /* Pin the card, action buttons, and chapter tabs; scroll only the chapter
-       content below them. */
-    > .panels-item {
-      overflow: hidden;
-      min-height: 0;
-      display: flex;
-      flex-direction: column;
-    }
-
-    > .panels-item > section.section:first-child {
-      flex: 0 0 auto;
-    }
-
-    .package-detail-sections {
-      flex: 1 1 auto;
-      min-height: 0;
-      overflow-y: auto;
-    }
-
     .package-detail-actions {
       display: flex;
       flex-wrap: wrap;
