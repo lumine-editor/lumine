@@ -104,6 +104,9 @@
   border: 1px solid var(--button-border-color);
   border-radius: var(--component-border-radius);
   background-color: var(--button-background-color);
+  /* Hide the native dropdown arrow; the picker still opens on click. */
+  appearance: none;
+  padding: 0 0.4em;
 }
 
 .settings-view .package-version-select:hover,
