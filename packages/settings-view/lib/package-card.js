@@ -274,41 +274,47 @@ export default class PackageCard {
     return selector.value;
   }
 
-  catalogProvenanceText() {
+  // Every catalog a package is available from, including the Pulsar registry
+  // when it also surfaced the same repository.
+  catalogSourcesText() {
+    const label = (source) => (source === "pulsar" ? "Pulsar registry" : source);
     const selectors = this.pack.catalogSelectors || [];
     if (selectors.length) {
-      const sources = selectors.map(({ catalogSource, selector }) => {
-        const ref =
-          !selector || selector.type === "latest"
-            ? "latest stable/default branch"
-            : `${selector.type}:${selector.value}`;
-        return `${catalogSource} (${ref})`;
-      });
-      return `Catalogs: ${sources.join(" · ")}${
-        this.pack.selectorConflict ? " · selector conflict; the first catalog wins" : ""
-      }`;
+      return selectors
+        .map(({ catalogSource, selector }) => {
+          const ref =
+            !selector || selector.type === "latest"
+              ? "latest/default"
+              : `${selector.type}:${selector.value}`;
+          return `${label(catalogSource)} (${ref})`;
+        })
+        .join(" · ");
     }
-    return (this.pack.catalogSources || []).length
-      ? `Catalogs: ${this.pack.catalogSources.join(" · ")}`
-      : "";
+    return (this.pack.catalogSources || []).map(label).join(" · ");
   }
 
   // The catalog details shown on hover over the repository reference: origin,
   // resolved commit, selected ref, catalog provenance, and validation status.
+  // Field labels are bold; the content is left-aligned via the tooltip class.
   catalogTooltipHtml() {
     const install = this.pack.apmInstallSource || {};
     const lines = [];
-    const origin = this.pack.originKey || install.origin;
-    if (origin) lines.push(`Origin: ${origin}`);
+    const field = (fieldLabel, value) => {
+      if (value == null || value === "") return;
+      lines.push(`<strong>${escapeHtml(fieldLabel)}</strong> ${escapeHtml(String(value))}`);
+    };
+    field("Origin:", this.pack.originKey || install.origin);
     const sha = this.pack.resolvedSha || install.sha;
-    if (sha) lines.push(`Commit: ${sha.slice(0, 8)}`);
+    if (sha) field("Commit:", sha.slice(0, 8));
     const selector = this.currentSelector();
-    if (selector && selector.value) lines.push(`Ref: ${selector.type} ${selector.value}`);
-    const provenance = this.catalogProvenanceText();
-    if (provenance) lines.push(provenance);
-    if (this.pack.status && this.pack.status !== "ready") lines.push(`Status: ${this.pack.status}`);
-    if (this.pack.error) lines.push(this.pack.error);
-    return lines.map((line) => escapeHtml(line)).join("<br>");
+    if (selector && selector.value) field("Ref:", `${selector.type} ${selector.value}`);
+    field("Catalogs:", this.catalogSourcesText());
+    if (this.pack.selectorConflict) {
+      lines.push(escapeHtml("Selector conflict; the first catalog wins."));
+    }
+    if (this.pack.status && this.pack.status !== "ready") field("Status:", this.pack.status);
+    if (this.pack.error) lines.push(escapeHtml(this.pack.error));
+    return lines.join("<br>");
   }
 
   versionOptionEntries() {
@@ -633,6 +639,7 @@ export default class PackageCard {
       this.disposables.add(
         atom.tooltips.add(this.refs.repoLink, {
           html: true,
+          class: "package-catalog-tooltip",
           title: () => this.catalogTooltipHtml(),
         }),
       );

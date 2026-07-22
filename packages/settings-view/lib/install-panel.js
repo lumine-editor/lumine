@@ -715,11 +715,36 @@ export default class InstallPanel {
       .map(({ pack }) => pack);
   }
 
-  addResultCard(pack, origins, results) {
+  addResultCard(pack, byOrigin, results) {
     const key = packageOrigin(pack);
-    if (key && origins.has(key)) return;
-    if (key) origins.add(key);
+    if (key && byOrigin.has(key)) {
+      // A duplicate (e.g. the same repository surfaced by the Pulsar registry)
+      // does not add a second card, but its catalog provenance is recorded on
+      // the card that is kept.
+      const index = byOrigin.get(key);
+      results[index] = this.mergeCatalogProvenance(results[index], pack);
+      return;
+    }
+    if (key) byOrigin.set(key, results.length);
     results.push(pack);
+  }
+
+  // Adds the duplicate's catalog sources/selectors to the kept card without
+  // mutating the cached record (returns a copy).
+  mergeCatalogProvenance(kept, duplicate) {
+    const keptSources = kept.catalogSources || [];
+    const newSources = (duplicate.catalogSources || []).filter(
+      (source) => !keptSources.includes(source),
+    );
+    if (!newSources.length) return kept;
+    const newSelectors = (duplicate.catalogSelectors || []).filter((entry) =>
+      newSources.includes(entry.catalogSource),
+    );
+    return {
+      ...kept,
+      catalogSources: [...keptSources, ...newSources],
+      catalogSelectors: [...(kept.catalogSelectors || []), ...newSelectors],
+    };
   }
 
   renderSearchList(packages) {
@@ -766,10 +791,10 @@ export default class InstallPanel {
     this.refs.searchMessage.style.display = "none";
 
     // Local community catalog results first, deduplicated by repository.
-    const origins = new Set();
+    const byOrigin = new Map();
     const results = [];
     for (const pack of this.scoreCatalog(query)) {
-      this.addResultCard(pack, origins, results);
+      this.addResultCard(pack, byOrigin, results);
     }
 
     // Opt-in live search of the Pulsar registry, appended and deduped by repo.
@@ -797,7 +822,7 @@ export default class InstallPanel {
       }
       if (generation !== this.searchGeneration) return results;
       for (const pack of pulsarResults) {
-        if (this.matchesFilter(pack)) this.addResultCard(pack, origins, results);
+        if (this.matchesFilter(pack)) this.addResultCard(pack, byOrigin, results);
       }
     }
 

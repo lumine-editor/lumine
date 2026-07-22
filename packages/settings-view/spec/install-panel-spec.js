@@ -292,7 +292,15 @@ describe("InstallPanel", function () {
   describe("Pulsar registry results", function () {
     beforeEach(function () {
       panel.catalogPackages = [
-        { name: "shared", repository: "owner/shared", installSource: "owner/shared" },
+        {
+          name: "shared",
+          repository: "owner/shared",
+          installSource: "owner/shared",
+          catalogSources: ["owner/catalog"],
+          catalogSelectors: [
+            { catalogSource: "owner/catalog", selector: { type: "latest", value: null } },
+          ],
+        },
       ];
       panel.catalogPromise = Promise.resolve({ schemaVersion: 1, packages: panel.catalogPackages });
     });
@@ -321,6 +329,9 @@ describe("InstallPanel", function () {
           expect(pulsarClient.search).toHaveBeenCalledWith("shared");
           expect(results.map(({ name }) => name)).toEqual(["shared", "pulsar-only"]);
           expect(results[1].catalogSources).toEqual(["pulsar"]);
+          // The deduped Pulsar duplicate is recorded as an extra source on the
+          // kept catalog card rather than dropped.
+          expect(results[0].catalogSources).toEqual(["owner/catalog", "pulsar"]);
           expect(panel.refs.resultsContainer.querySelectorAll(".package-card").length).toBe(2);
         }),
       );

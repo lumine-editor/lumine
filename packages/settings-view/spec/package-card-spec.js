@@ -342,6 +342,30 @@ describe("PackageCard", function () {
     expect(tooltip).toContain("first catalog wins");
   });
 
+  it("lists every source (including Pulsar) with bold labels in the repo tooltip", function () {
+    setPackageStatusSpies({ installed: false, disabled: false });
+    card = new PackageCard(
+      {
+        name: "twin",
+        repository: "author/twin",
+        originKey: "github.com/author/twin",
+        status: "ready",
+        catalogSelectors: [
+          { catalogSource: "owner/catalog", selector: { type: "latest", value: null } },
+          { catalogSource: "pulsar", selector: { type: "latest", value: null } },
+        ],
+      },
+      new SettingsView(),
+      packageManager,
+    );
+
+    const tooltip = card.catalogTooltipHtml();
+    expect(tooltip).toContain("<strong>Origin:</strong>");
+    expect(tooltip).toContain("<strong>Catalogs:</strong>");
+    expect(tooltip).toContain("owner/catalog");
+    expect(tooltip).toContain("Pulsar registry");
+  });
+
   it("disables install with a hover note when no compatible version exists", function () {
     setPackageStatusSpies({ installed: false, disabled: false });
     spyOn(packageManager, "loadCompatiblePackageVersion").andCallFake((name, cb) => cb(null, {}));

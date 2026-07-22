@@ -100,6 +100,13 @@
   vertical-align: baseline;
 }
 
+/* The repository hover tooltip renders at the body level, so it is not scoped
+   under .settings-view. Left-align its content (Bootstrap centers by default). */
+.package-catalog-tooltip .tooltip-inner {
+  text-align: left;
+  max-width: 32em;
+}
+
 .settings-view .package-catalog-status {
   display: block;
   margin-top: calc(var(--component-padding) / 2);
