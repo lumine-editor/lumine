@@ -254,6 +254,41 @@ describe("PackageDetailView", function () {
     expect(view.packageCard.element.querySelector(".replace-button")).toBeNull();
   });
 
+  it("always offers README and License chapters, even without a LICENSE file", function () {
+    atom.packages.loadPackage(path.join(__dirname, "fixtures", "package-with-config"));
+    const pack = atom.packages.getLoadedPackage("package-with-config");
+    view = new PackageDetailView(pack, new SettingsView(), packageManager, SnippetsProvider);
+
+    expect(view.refs.chapterTabs.querySelector('[data-chapter-tab="readme"]')).not.toBeNull();
+    expect(view.refs.chapterTabs.querySelector('[data-chapter-tab="license"]')).not.toBeNull();
+    // The tab bar is shown even though this package ships no LICENSE file.
+    expect(view.refs.chapterTabs.style.display).not.toBe("none");
+  });
+
+  it("publishes the README headers to the sidebar table of contents", function () {
+    const settingsView = new SettingsView();
+    const showToc = spyOn(settingsView, "showTableOfContents").andCallThrough();
+    const metadata = {
+      name: "toc-pkg",
+      version: "1.0.0",
+      repository: "owner/toc-pkg",
+      owner: "owner",
+      engines: { atom: "*" },
+      readme: "# Title\n\nintro\n\n## Features\n\n- a\n\n## Usage\n\ntext",
+    };
+    view = new PackageDetailView(
+      { ...metadata, metadata },
+      settingsView,
+      packageManager,
+      SnippetsProvider,
+    );
+
+    expect(showToc).toHaveBeenCalled();
+    const labels = showToc.mostRecentCall.args[0].map((entry) => entry.label);
+    expect(labels.some((label) => label.includes("Features"))).toBe(true);
+    expect(labels.some((label) => label.includes("Usage"))).toBe(true);
+  });
+
   it("shows the full owner/repo in the repo link for a shorthand repository", function () {
     const metadata = {
       name: "cursor-leader",

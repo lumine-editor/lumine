@@ -271,6 +271,10 @@ export default class PackageDetailView {
       this.packageCard = null;
     }
 
+    if (this.settingsView && typeof this.settingsView.clearTableOfContents === "function") {
+      this.settingsView.clearTableOfContents();
+    }
+
     this.disposables.dispose();
     return etch.destroy(this);
   }
@@ -329,8 +333,8 @@ export default class PackageDetailView {
       button.setAttribute("aria-label", meta.label);
       this.refs.chapterTabs.appendChild(button);
     }
-    // Only worth a tab bar when there's more than one chapter to switch between.
-    this.refs.chapterTabs.style.display = chapters.length > 1 ? "" : "none";
+    // README and License are always present, so the tab bar is always shown.
+    this.refs.chapterTabs.style.display = chapters.length ? "" : "none";
 
     this.applyChapterVisibility(elements);
   }
@@ -397,6 +401,7 @@ export default class PackageDetailView {
 
   show() {
     this.element.style.display = "";
+    this.publishTableOfContents();
   }
 
   focus() {
@@ -577,8 +582,10 @@ export default class PackageDetailView {
       this.refs.openButton.style.display = "none";
     }
 
-    this.renderLicense();
+    // README first: it is the default chapter, so it must be present before the
+    // License (which always renders) triggers the first chapter rebuild.
     this.renderReadme();
+    this.renderLicense();
   }
 
   // Renders the LICENSE inline as its own chapter. For the installed version it
@@ -627,16 +634,8 @@ export default class PackageDetailView {
         .catch(() => {});
     }
 
-    if (content == null) {
-      // Nothing to show (yet): drop any existing license chapter.
-      if (this.licenseView) {
-        this.licenseView.destroy();
-        this.licenseView = null;
-        this.rebuildChapters();
-      }
-      return;
-    }
-
+    // The License chapter is always shown (a placeholder when there is no file)
+    // so the README/License tabs are always available.
     const licenseView = new PackageLicenseView(content, isMarkdown, licenseSrc);
     licenseView.element.dataset.chapter = "license";
     if (this.licenseView) {
@@ -768,6 +767,32 @@ export default class PackageDetailView {
     }
     this.readmeView = readmeView;
     this.rebuildChapters();
+    this.publishTableOfContents();
+  }
+
+  // Publishes the current README's headers to the sidebar TOC. Only while this
+  // detail view is the visible panel, so an async README load for a panel the
+  // user has navigated away from does not hijack the sidebar.
+  publishTableOfContents() {
+    if (!this.settingsView || typeof this.settingsView.showTableOfContents !== "function") return;
+    if (this.element.style.display === "none") return;
+
+    const readme = this.readmeView && this.readmeView.packageReadme;
+    const headings = readme ? readme.querySelectorAll("h1, h2, h3, h4, h5, h6") : [];
+    const entries = [];
+    for (const heading of headings) {
+      const label = heading.textContent.trim();
+      if (!label) continue;
+      entries.push({
+        label,
+        level: Number(heading.tagName.slice(1)) || 1,
+        onClick: () => {
+          this.setActiveChapter("readme");
+          heading.scrollIntoView();
+        },
+      });
+    }
+    this.settingsView.showTableOfContents(entries);
   }
 
   subscribeToPackageManager() {
