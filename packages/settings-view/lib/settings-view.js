@@ -489,11 +489,6 @@ export default class SettingsView {
       return;
     }
 
-    const heading = document.createElement("div");
-    heading.className = "config-toc-heading";
-    heading.textContent = "On this page";
-    container.appendChild(heading);
-
     const list = document.createElement("ul");
     // Reuse the sidebar nav styling (like the panels menu).
     list.className = "config-toc-list nav nav-pills nav-stacked";

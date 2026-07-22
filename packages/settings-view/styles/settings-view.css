@@ -504,15 +504,8 @@
        the sidebar nav (nav-pills nav-stacked) styling, like the panels menu. */
     .config-toc {
       border-top: 1px solid var(--base-border-color);
+      padding-top: calc(var(--component-padding) / 2);
       padding-bottom: var(--component-padding);
-
-      .config-toc-heading {
-        margin: var(--component-padding) 15px calc(var(--component-padding) / 2);
-        font-size: 0.9em;
-        font-weight: bold;
-        text-transform: uppercase;
-        color: var(--text-color-subtle);
-      }
 
       .config-toc-list {
         margin: 0;
@@ -681,6 +674,13 @@
 
     .package-chapter-tabs {
       margin-left: auto; /* push the chapter tabs to the right side */
+
+      /* Core .btn.selected uses --text-color-selected, which is near-black on the
+         accent background in light themes; use the button's own selected text
+         color so the active tab's icon reads clearly. */
+      .btn.selected {
+        color: var(--button-text-color-selected);
+      }
     }
 
     .package-license {
