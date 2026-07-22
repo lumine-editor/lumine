@@ -64,46 +64,55 @@ describe("PackageDetailView", function () {
     expect(view.refs.title.textContent).toBe("Package With Config");
   });
 
-  it("makes package sections accessible and collapsible", () => {
+  it("renders icon-only chapter tabs and shows one chapter at a time", () => {
     atom.packages.loadPackage(path.join(__dirname, "fixtures", "package-with-config"));
     const pack = atom.packages.getLoadedPackage("package-with-config");
     view = new PackageDetailView(pack, new SettingsView(), packageManager, SnippetsProvider);
 
-    const toggles = view.refs.sections.querySelectorAll(".package-section-toggle");
-    expect(toggles.length).toBeGreaterThan(1);
-    for (const toggle of toggles) {
-      expect(toggle.tagName).toBe("BUTTON");
-      expect(toggle.getAttribute("aria-expanded")).toBe("true");
+    const tabs = view.refs.chapterTabs.querySelectorAll("[data-chapter-tab]");
+    expect(tabs.length).toBeGreaterThan(1);
+    for (const tab of tabs) {
+      expect(tab.tagName).toBe("BUTTON");
+      expect(tab).toHaveClass("icon");
+      expect(tab.textContent).toBe(""); // icons only, no label text
     }
 
-    const settingsSection = view.refs.sections.querySelector(".settings-panel");
-    const settingsToggle = settingsSection.querySelector(".package-section-toggle");
-    settingsToggle.click();
-    expect(settingsSection).toHaveClass("is-collapsed");
-    expect(settingsToggle.getAttribute("aria-expanded")).toBe("false");
+    // README is the default chapter: its section is shown, the others hidden,
+    // and exactly one tab is selected.
+    expect(view.activeChapter).toBe("readme");
+    expect(view.refs.chapterTabs.querySelectorAll(".selected").length).toBe(1);
 
-    settingsToggle.click();
-    expect(settingsSection).not.toHaveClass("is-collapsed");
-    expect(settingsToggle.getAttribute("aria-expanded")).toBe("true");
+    const readmeSection = view.refs.sections.querySelector('[data-chapter="readme"]');
+    const settingsSection = view.refs.sections.querySelector('[data-chapter="settings"]');
+    expect(readmeSection.style.display).toBe("");
+    expect(settingsSection.style.display).toBe("none");
+
+    // Switching to the Settings tab reveals only that chapter.
+    view.refs.chapterTabs.querySelector('[data-chapter-tab="settings"]').click();
+    expect(view.activeChapter).toBe("settings");
+    expect(settingsSection.style.display).toBe("");
+    expect(readmeSection.style.display).toBe("none");
+    expect(view.refs.chapterTabs.querySelector('[data-chapter-tab="settings"]')).toHaveClass(
+      "selected",
+    );
   });
 
-  it("preserves collapsed package sections when their contents refresh", () => {
+  it("keeps the active chapter when the sections refresh", () => {
     atom.packages.loadPackage(path.join(__dirname, "fixtures", "package-with-config"));
     const pack = atom.packages.getLoadedPackage("package-with-config");
     view = new PackageDetailView(pack, new SettingsView(), packageManager, SnippetsProvider);
 
-    view.refs.sections
-      .querySelector('[data-package-section-key="settings"] .package-section-toggle')
-      .click();
+    view.refs.chapterTabs.querySelector('[data-chapter-tab="settings"]').click();
+    expect(view.activeChapter).toBe("settings");
+
     view.updateInstalledState();
 
-    const refreshedSection = view.refs.sections.querySelector(
-      '[data-package-section-key="settings"]',
+    expect(view.activeChapter).toBe("settings");
+    const settingsSection = view.refs.sections.querySelector('[data-chapter="settings"]');
+    expect(settingsSection.style.display).toBe("");
+    expect(view.refs.chapterTabs.querySelector('[data-chapter-tab="settings"]')).toHaveClass(
+      "selected",
     );
-    expect(refreshedSection).toHaveClass("is-collapsed");
-    expect(
-      refreshedSection.querySelector(".package-section-toggle").getAttribute("aria-expanded"),
-    ).toBe("false");
   });
 
   it("renders an installed package README with its file path", function () {
@@ -123,24 +132,97 @@ describe("PackageDetailView", function () {
     const pack = atom.packages.getLoadedPackage("package-with-config");
     view = new PackageDetailView(pack, new SettingsView(), packageManager, SnippetsProvider);
 
-    const readmeElement = view.readmeView && view.readmeView.element;
-    const configSections = Array.from(view.refs.sections.children).filter(
-      (child) => child !== readmeElement,
-    );
-    expect(configSections.length).toBeGreaterThan(0);
+    const readmeSection = view.refs.sections.querySelector('[data-chapter="readme"]');
+    const settingsSection = view.refs.sections.querySelector('[data-chapter="settings"]');
+    // The Settings chapter is available for the installed version.
+    expect(view.refs.chapterTabs.querySelector('[data-chapter-tab="settings"]')).not.toBeNull();
 
-    // Selecting a different version hides the config sections, leaving the README.
+    // Previewing a different version restricts the view to just the README: the
+    // config chapters are removed and their sections hidden.
     view.applySelectedRef({ previewVersion: true });
-    for (const section of configSections) {
-      expect(section.style.display).toBe("none");
-    }
-    expect(readmeElement.style.display).not.toBe("none");
+    expect(view.activeChapter).toBe("readme");
+    expect(view.refs.chapterTabs.querySelector('[data-chapter-tab="settings"]')).toBeNull();
+    expect(readmeSection.style.display).not.toBe("none");
+    expect(settingsSection.style.display).toBe("none");
 
-    // Selecting the installed version again restores them.
+    // Returning to the installed version brings the config chapters back.
     view.applySelectedRef({ previewVersion: false });
-    for (const section of configSections) {
-      expect(section.style.display).not.toBe("none");
-    }
+    expect(view.refs.chapterTabs.querySelector('[data-chapter-tab="settings"]')).not.toBeNull();
+  });
+
+  it("renders a License chapter and keeps it while previewing another version", function () {
+    const metadata = {
+      name: "pkg-with-license",
+      version: "1.0.0",
+      repository: "owner/pkg-with-license",
+      owner: "owner",
+      engines: { atom: "*" },
+      originKey: "github.com/owner/pkg-with-license",
+      resolvedSha: "a".repeat(40),
+      readme: "# pkg-with-license",
+      license: "MIT License\n\nPermission is hereby granted, free of charge...",
+      licenseIsMarkdown: false,
+    };
+    view = new PackageDetailView(
+      { ...metadata, metadata },
+      new SettingsView(),
+      packageManager,
+      SnippetsProvider,
+    );
+
+    // The license text is already on the metadata, so the chapter renders now.
+    expect(view.refs.chapterTabs.querySelector('[data-chapter-tab="license"]')).not.toBeNull();
+    const licenseSection = view.refs.sections.querySelector('[data-chapter="license"]');
+    expect(licenseSection).not.toBeNull();
+    expect(licenseSection.textContent).toContain("Permission is hereby granted");
+
+    // README and License both belong to the version, so both survive a preview.
+    view.applySelectedRef({ previewVersion: true });
+    expect(view.refs.chapterTabs.querySelector('[data-chapter-tab="readme"]')).not.toBeNull();
+    expect(view.refs.chapterTabs.querySelector('[data-chapter-tab="license"]')).not.toBeNull();
+  });
+
+  it("lazily fetches the LICENSE for a browsed version", function () {
+    const client = packageManager.getCatalogClient();
+    const loadLicense = spyOn(client, "loadLicense").andReturn(Promise.resolve(null));
+    spyOn(client, "loadReadme").andReturn(Promise.resolve(null));
+
+    const metadata = {
+      name: "pkg-lazy-license",
+      version: "1.0.0",
+      repository: "owner/pkg-lazy-license",
+      owner: "owner",
+      engines: { atom: "*" },
+      originKey: "github.com/owner/pkg-lazy-license",
+      resolvedSha: "b".repeat(40),
+      readme: "# pkg-lazy-license",
+    };
+    view = new PackageDetailView(
+      { ...metadata, metadata },
+      new SettingsView(),
+      packageManager,
+      SnippetsProvider,
+    );
+
+    // No local file and no cached text, so the LICENSE is fetched for the commit.
+    expect(loadLicense).toHaveBeenCalled();
+  });
+
+  it("opens on README by default and on Settings when the Settings button asks", () => {
+    atom.packages.loadPackage(path.join(__dirname, "fixtures", "package-with-config"));
+    const pack = atom.packages.getLoadedPackage("package-with-config");
+    view = new PackageDetailView(pack, new SettingsView(), packageManager, SnippetsProvider);
+
+    // Opening via the card's Settings button jumps straight to the Settings chapter.
+    view.beforeShow({ initialChapter: "settings" });
+    expect(view.activeChapter).toBe("settings");
+    expect(view.refs.chapterTabs.querySelector('[data-chapter-tab="settings"]')).toHaveClass(
+      "selected",
+    );
+
+    // Any other open resets to the default README chapter.
+    view.beforeShow({});
+    expect(view.activeChapter).toBe("readme");
   });
 
   it("shows the full owner/repo in the repo link for a shorthand repository", function () {

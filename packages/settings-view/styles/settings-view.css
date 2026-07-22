@@ -629,6 +629,50 @@
     flex-direction: column;
     height: 100%;
 
+    /* Pin the card, action buttons, and chapter tabs; scroll only the chapter
+       content below them. */
+    > .panels-item {
+      overflow: hidden;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+    }
+
+    > .panels-item > section.section:first-child {
+      flex: 0 0 auto;
+    }
+
+    .package-detail-sections {
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
+    }
+
+    .package-detail-actions {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: calc(var(--component-padding) / 2);
+    }
+
+    .package-chapter-tabs {
+      margin-left: auto; /* push the chapter tabs to the right side */
+
+      .btn.selected {
+        color: var(--text-color-selected);
+        background-color: var(--background-color-selected);
+      }
+    }
+
+    .package-license {
+      padding-top: var(--component-padding);
+
+      .package-license-text {
+        white-space: pre-wrap;
+        word-break: break-word;
+      }
+    }
+
     .package-keymap-table,
     .package-grammars-table,
     .package-snippets-table {
@@ -713,40 +757,6 @@
 
     .package-snippets-table {
       max-width: 100%;
-    }
-
-    .package-section-toggle {
-      display: flex;
-      align-items: center;
-      width: 100%;
-      padding: 0;
-      color: var(--text-color-highlight);
-      font-family: inherit;
-      text-align: left;
-      border: none;
-      background: none;
-      cursor: pointer;
-      appearance: none;
-
-      &:focus-visible {
-        outline: 2px solid var(--text-color-info);
-        outline-offset: calc(var(--component-padding) / 2);
-      }
-    }
-
-    .package-collapsible-section.is-collapsed {
-      > .package-section-toggle {
-        margin-bottom: 0;
-      }
-
-      > .section-container > .package-section-toggle {
-        margin-bottom: 0;
-      }
-
-      > .section-heading ~ *,
-      > .section-container > .section-heading ~ * {
-        display: none !important;
-      }
     }
 
     .update-message {

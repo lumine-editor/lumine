@@ -11,12 +11,26 @@ import etch from "@lumine-code/etch";
 import PackageCard from "./package-card";
 import PackageGrammarsView from "./package-grammars-view";
 import PackageKeymapView from "./package-keymap-view";
+import PackageLicenseView from "./package-license-view";
 import PackageReadmeView from "./package-readme-view";
 import PackageSnippetsView from "./package-snippets-view";
 import SettingsPanel from "./settings-panel";
 import { packageOrigin } from "./utils";
 
 const NORMALIZE_PACKAGE_DATA_README_ERROR = "ERROR: No README data found!";
+
+// The chapters of the detail view, in tab order. Each maps to a section that is
+// appended to `refs.sections`; only one chapter is shown at a time, selected by
+// the icon-only tab buttons beside the action buttons.
+const CHAPTER_ORDER = ["readme", "settings", "keymap", "grammars", "snippets", "license"];
+const CHAPTER_META = {
+  readme: { label: "README", icon: "icon-book" },
+  settings: { label: "Settings", icon: "icon-gear" },
+  keymap: { label: "Keybindings", icon: "icon-keyboard" },
+  grammars: { label: "Grammars", icon: "icon-file-code" },
+  snippets: { label: "Snippets", icon: "icon-code" },
+  license: { label: "License", icon: "icon-law" },
+};
 
 export default class PackageDetailView {
   constructor(pack, settingsView, packageManager, snippetsProvider) {
@@ -31,9 +45,10 @@ export default class PackageDetailView {
     this.packageManager = packageManager;
     this.snippetsProvider = snippetsProvider;
     this.disposables = new CompositeDisposable();
-    this.collapsedPackageSections = new Set();
+    this.activeChapter = "readme";
+    this.previewMode = false;
     etch.initialize(this);
-    this.setupCollapsibleSections();
+    this.setupChapters();
     this.loadPackage();
 
     this.disposables.add(
@@ -101,19 +116,6 @@ export default class PackageDetailView {
     this.disposables.add(
       new Disposable(() => {
         this.refs.changelogButton.removeEventListener("click", changelogButtonClickHandler);
-      }),
-    );
-
-    const licenseButtonClickHandler = (event) => {
-      event.preventDefault();
-      if (this.licensePath) {
-        this.openMarkdownFile(this.licensePath);
-      }
-    };
-    this.refs.licenseButton.addEventListener("click", licenseButtonClickHandler);
-    this.disposables.add(
-      new Disposable(() => {
-        this.refs.licenseButton.removeEventListener("click", licenseButtonClickHandler);
       }),
     );
 
@@ -272,58 +274,106 @@ export default class PackageDetailView {
     return etch.destroy(this);
   }
 
-  setupCollapsibleSections() {
-    const toggleHandler = (event) => {
-      const toggle = event.target.closest(".package-section-toggle");
-      if (!toggle || !this.refs.sections.contains(toggle)) return;
-
-      const section = toggle.closest(".package-collapsible-section");
-      const key = section.dataset.packageSectionKey;
-      const collapsed = section.classList.toggle("is-collapsed");
-      toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
-      if (collapsed) {
-        this.collapsedPackageSections.add(key);
-      } else {
-        this.collapsedPackageSections.delete(key);
-      }
+  setupChapters() {
+    const clickHandler = (event) => {
+      const button = event.target.closest("[data-chapter-tab]");
+      if (!button || !this.refs.chapterTabs.contains(button)) return;
+      this.setActiveChapter(button.dataset.chapterTab);
     };
-    this.refs.sections.addEventListener("click", toggleHandler);
+    this.refs.chapterTabs.addEventListener("click", clickHandler);
     this.disposables.add(
-      new Disposable(() => this.refs.sections.removeEventListener("click", toggleHandler)),
+      new Disposable(() => this.refs.chapterTabs.removeEventListener("click", clickHandler)),
     );
 
-    this.sectionsObserver = new MutationObserver(() => this.enhancePackageSections());
+    // Sub-views are appended asynchronously (settings/keymap/grammars/snippets on
+    // install, the README once fetched), so rebuild the chapter tabs whenever the
+    // section list changes.
+    this.sectionsObserver = new MutationObserver(() => this.rebuildChapters());
     this.sectionsObserver.observe(this.refs.sections, { childList: true, subtree: true });
     this.disposables.add(new Disposable(() => this.sectionsObserver.disconnect()));
   }
 
-  enhancePackageSections() {
-    for (const section of this.refs.sections.querySelectorAll("section.section")) {
-      if (section.classList.contains("package-collapsible-section")) continue;
+  // (Re)builds the icon-only chapter tabs from the sections currently present and
+  // shows only the active chapter. Idempotent: safe to call on every mutation.
+  rebuildChapters() {
+    if (!this.refs || !this.refs.chapterTabs) return;
 
-      const heading =
-        section.querySelector(":scope > .section-heading") ||
-        section.querySelector(":scope > .section-container > .section-heading");
-      if (!heading) continue;
+    const elements = this.chapterElements();
 
-      const key = this.packageSectionKey(heading.textContent);
-      const toggle = document.createElement("button");
-      toggle.type = "button";
-      toggle.className = heading.className;
-      toggle.classList.add("package-section-toggle");
-      while (heading.firstChild) toggle.appendChild(heading.firstChild);
-      heading.replaceWith(toggle);
+    // While previewing a version other than the installed one, only the README
+    // and License belong to that version (both are fetched for the previewed
+    // commit); settings, keymaps, grammars, and snippets describe the installed
+    // copy.
+    const allowed = this.previewMode ? new Set(["readme", "license"]) : null;
+    const chapters = CHAPTER_ORDER.filter((key) => {
+      const element = elements.get(key);
+      if (!element) return false;
+      if (allowed && !allowed.has(key)) return false;
+      return this.chapterHasContent(key, element);
+    });
 
-      section.classList.add("package-collapsible-section");
-      section.dataset.packageSectionKey = key;
-      const collapsed = this.collapsedPackageSections.has(key);
-      section.classList.toggle("is-collapsed", collapsed);
-      toggle.setAttribute("aria-expanded", collapsed ? "false" : "true");
+    if (!chapters.includes(this.activeChapter)) {
+      this.activeChapter = chapters[0] || null;
+    }
+
+    this.refs.chapterTabs.innerHTML = "";
+    for (const key of chapters) {
+      const meta = CHAPTER_META[key];
+      const button = document.createElement("button");
+      button.type = "button";
+      button.className = `btn btn-default icon ${meta.icon}`;
+      button.classList.toggle("selected", key === this.activeChapter);
+      button.dataset.chapterTab = key;
+      button.title = meta.label;
+      button.setAttribute("aria-label", meta.label);
+      this.refs.chapterTabs.appendChild(button);
+    }
+    // Only worth a tab bar when there's more than one chapter to switch between.
+    this.refs.chapterTabs.style.display = chapters.length > 1 ? "" : "none";
+
+    this.applyChapterVisibility(elements);
+  }
+
+  chapterElements() {
+    const elements = new Map();
+    for (const child of this.refs.sections.children) {
+      const key = child.dataset && child.dataset.chapter;
+      if (key) elements.set(key, child);
+    }
+    return elements;
+  }
+
+  applyChapterVisibility(elements = this.chapterElements()) {
+    for (const [key, element] of elements) {
+      element.style.display = key === this.activeChapter ? "" : "none";
     }
   }
 
-  packageSectionKey(title) {
-    return String(title).trim().toLocaleLowerCase().replace(/\s+/g, "-");
+  setActiveChapter(key) {
+    if (!key || key === this.activeChapter) return;
+    this.activeChapter = key;
+    for (const button of this.refs.chapterTabs.querySelectorAll("[data-chapter-tab]")) {
+      button.classList.toggle("selected", button.dataset.chapterTab === key);
+    }
+    this.applyChapterVisibility();
+    // Start each chapter from the top of the scroll zone.
+    this.refs.sections.scrollTop = 0;
+  }
+
+  // Whether a chapter's section actually has something to show, so we don't offer
+  // an empty tab (e.g. a package with no settings, keybindings, or grammars).
+  chapterHasContent(key, element) {
+    switch (key) {
+      case "settings":
+        return !!element.querySelector(".control-group");
+      case "keymap":
+      case "snippets":
+        return !!element.querySelector("tbody tr");
+      case "grammars":
+        return !!element.querySelector(".settings-panel");
+      default:
+        return true; // readme, license
+    }
   }
 
   update() {}
@@ -335,6 +385,13 @@ export default class PackageDetailView {
 
     this.breadcrumbBackPanel = opts.back;
     this.refs.breadcrumb.textContent = this.breadcrumbBackPanel;
+
+    // Every time the detail view is shown it starts on the README, unless the
+    // opener asked for a specific chapter (the card's Settings button opens
+    // straight on "settings"). `rebuildChapters` falls back to the README if the
+    // requested chapter isn't available.
+    this.activeChapter = opts.initialChapter || "readme";
+    this.rebuildChapters();
   }
 
   show() {
@@ -394,29 +451,30 @@ export default class PackageDetailView {
               <p ref="packageRepo" className="link icon icon-repo repo-link hidden" />
               <p ref="startupTime" className="text icon icon-dashboard hidden" tabIndex="-1" />
 
-              <div ref="buttons" className="btn-wrap-group hidden">
-                <button ref="learnMoreButton" className="btn btn-default icon icon-link">
-                  View on GitHub
-                </button>
-                <button ref="issueButton" className="btn btn-default icon icon-bug">
-                  Report Issue
-                </button>
-                <button ref="changelogButton" className="btn btn-default icon icon-squirrel">
-                  CHANGELOG
-                </button>
-                <button ref="licenseButton" className="btn btn-default icon icon-law">
-                  LICENSE
-                </button>
-                <button ref="openButton" className="btn btn-default icon icon-link-external">
-                  View Code
-                </button>
+              <div className="package-detail-actions">
+                <div ref="buttons" className="btn-wrap-group hidden">
+                  <button ref="learnMoreButton" className="btn btn-default icon icon-link">
+                    View on GitHub
+                  </button>
+                  <button ref="issueButton" className="btn btn-default icon icon-bug">
+                    Report Issue
+                  </button>
+                  <button ref="changelogButton" className="btn btn-default icon icon-squirrel">
+                    CHANGELOG
+                  </button>
+                  <button ref="openButton" className="btn btn-default icon icon-link-external">
+                    View Code
+                  </button>
+                </div>
+
+                <div ref="chapterTabs" className="btn-group package-chapter-tabs" />
               </div>
 
               <div ref="errors" />
             </form>
           </section>
 
-          <div ref="sections" />
+          <div ref="sections" className="package-detail-sections" />
         </div>
       </div>
     );
@@ -442,6 +500,11 @@ export default class PackageDetailView {
   }
 
   updateInstalledState() {
+    // This renders the installed version, so leave any preview mode and allow the
+    // License to be re-read/re-fetched for the current version.
+    this.previewMode = false;
+    this.licenseRequested = false;
+
     if (this.settingsPanel) {
       this.settingsPanel.destroy();
       this.settingsPanel = null;
@@ -467,6 +530,11 @@ export default class PackageDetailView {
       this.readmeView = null;
     }
 
+    if (this.licenseView) {
+      this.licenseView.destroy();
+      this.licenseView = null;
+    }
+
     this.updateFileButtons();
     this.activateConfig();
     this.refs.startupTime.style.display = "none";
@@ -476,12 +544,16 @@ export default class PackageDetailView {
       if (!atom.packages.isPackageDisabled(this.pack.name)) {
         this.settingsPanel = new SettingsPanel({ namespace: this.pack.name, includeTitle: false });
         this.keymapView = new PackageKeymapView(this.pack);
+        this.settingsPanel.element.dataset.chapter = "settings";
+        this.keymapView.element.dataset.chapter = "keymap";
         this.refs.sections.appendChild(this.settingsPanel.element);
         this.refs.sections.appendChild(this.keymapView.element);
 
         if (this.pack.path) {
           this.grammarsView = new PackageGrammarsView(this.pack.path);
           this.snippetsView = new PackageSnippetsView(this.pack, this.snippetsProvider);
+          this.grammarsView.element.dataset.chapter = "grammars";
+          this.snippetsView.element.dataset.chapter = "snippets";
           this.refs.sections.appendChild(this.grammarsView.element);
           this.refs.sections.appendChild(this.snippetsView.element);
         }
@@ -503,7 +575,76 @@ export default class PackageDetailView {
       this.refs.openButton.style.display = "none";
     }
 
+    this.renderLicense();
     this.renderReadme();
+  }
+
+  // Renders the LICENSE inline as its own chapter. For the installed version it
+  // reads the local file (`updateFileButtons` sets `this.licensePath`); for a
+  // browsed or previewed version it lazily fetches the LICENSE for the resolved
+  // commit, the same way the README is fetched.
+  renderLicense() {
+    const meta = this.pack.metadata || {};
+    let content = null;
+    let isMarkdown = false;
+    let licenseSrc = null;
+
+    const localAvailable =
+      !this.previewMode &&
+      this.licensePath &&
+      fs.existsSync(this.licensePath) &&
+      fs.statSync(this.licensePath).isFile();
+
+    if (localAvailable) {
+      try {
+        content = fs.readFileSync(this.licensePath, { encoding: "utf8" });
+        isMarkdown = /\.(md|markdown)$/i.test(this.licensePath);
+        licenseSrc = this.licensePath;
+      } catch {
+        content = null;
+      }
+    } else if (meta.license != null) {
+      content = meta.license;
+      isMarkdown = meta.licenseIsMarkdown === true;
+      licenseSrc = meta.licenseSource || null;
+    } else if (!this.licenseRequested && meta.originKey && meta.resolvedSha) {
+      this.licenseRequested = true;
+      this.packageManager
+        .getCatalogClient()
+        .loadLicense(meta)
+        .then((entry) => {
+          if (!entry) return;
+          meta.license = entry.body;
+          meta.licenseSource = entry.source;
+          meta.licenseIsMarkdown = entry.isMarkdown === true;
+          this.renderLicense();
+        })
+        .catch(() => {});
+    }
+
+    if (content == null) {
+      // Nothing to show (yet): drop any existing license chapter.
+      if (this.licenseView) {
+        this.licenseView.destroy();
+        this.licenseView = null;
+        this.rebuildChapters();
+      }
+      return;
+    }
+
+    const licenseView = new PackageLicenseView(content, isMarkdown, licenseSrc);
+    licenseView.element.dataset.chapter = "license";
+    if (this.licenseView) {
+      this.licenseView.element.parentElement.replaceChild(
+        licenseView.element,
+        this.licenseView.element,
+      );
+      this.licenseView.destroy();
+    } else {
+      this.refs.sections.appendChild(licenseView.element);
+    }
+    this.licenseView = licenseView;
+    this.rebuildChapters();
   }
 
   // The embedded card changed its selected ref. Reflect the new commit in the
@@ -527,24 +668,30 @@ export default class PackageDetailView {
       meta.name = pack.name;
       this.refs.title.textContent = _.undasherize(_.uncamelcase(pack.name));
     }
+    // Settings, keymaps, grammars, and snippets belong to the installed version.
+    // While a different version is selected, only the README and License are
+    // shown (both re-fetched for that version). Set the flag before rendering so
+    // the License reads the previewed commit rather than the local file.
+    this.previewMode = pack.previewVersion === true;
     if (shaChanged) {
       meta.readme = undefined;
       meta.readmeSource = undefined;
       this.readmeRequested = false;
+      meta.license = undefined;
+      meta.licenseSource = undefined;
+      meta.licenseIsMarkdown = undefined;
+      this.licenseRequested = false;
       this.renderReadme();
+      this.renderLicense();
     }
-    // Settings, keymaps, grammars, and snippets belong to the installed version.
-    // While a different version is selected, show only its README (the card sets
-    // `previewVersion` when the selected ref is not the installed one).
-    this.setConfigSectionsVisible(pack.previewVersion !== true);
+    this.rebuildChapters();
   }
 
   setConfigSectionsVisible(visible) {
-    const readmeElement = this.readmeView && this.readmeView.element;
-    for (const child of Array.from(this.refs.sections.children)) {
-      if (child === readmeElement) continue;
-      child.style.display = visible ? "" : "none";
-    }
+    // Previewing a non-installed version restricts the chapters to the README and
+    // License (both re-fetched for that version); rebuild the tab bar to match.
+    this.previewMode = !visible;
+    this.rebuildChapters();
   }
 
   renderReadme() {
@@ -604,6 +751,7 @@ export default class PackageDetailView {
     }
 
     const readmeView = new PackageReadmeView(readme, readmeSrc, readmeIsLocal);
+    readmeView.element.dataset.chapter = "readme";
     if (this.readmeView) {
       this.readmeView.element.parentElement.replaceChild(
         readmeView.element,
@@ -614,7 +762,7 @@ export default class PackageDetailView {
       this.refs.sections.appendChild(readmeView.element);
     }
     this.readmeView = readmeView;
-    this.enhancePackageSections();
+    this.rebuildChapters();
   }
 
   subscribeToPackageManager() {
@@ -676,7 +824,6 @@ export default class PackageDetailView {
           : null;
     if (!packagePath) {
       this.refs.changelogButton.style.display = "none";
-      this.refs.licenseButton.style.display = "none";
       return;
     }
     for (const child of fs.listSync(packagePath)) {
@@ -704,12 +851,6 @@ export default class PackageDetailView {
     } else {
       this.refs.changelogButton.style.display = "none";
     }
-
-    if (this.licensePath) {
-      this.refs.licenseButton.style.display = "";
-    } else {
-      this.refs.licenseButton.style.display = "none";
-    }
   }
 
   getStartupTime() {
@@ -718,28 +859,29 @@ export default class PackageDetailView {
     return loadTime + activateTime;
   }
 
+  // Only the chapter zone scrolls; the card, actions, and tabs stay pinned above.
   scrollUp() {
-    this.element.scrollTop -= document.body.offsetHeight / 20;
+    this.refs.sections.scrollTop -= document.body.offsetHeight / 20;
   }
 
   scrollDown() {
-    this.element.scrollTop += document.body.offsetHeight / 20;
+    this.refs.sections.scrollTop += document.body.offsetHeight / 20;
   }
 
   pageUp() {
-    this.element.scrollTop -= this.element.offsetHeight;
+    this.refs.sections.scrollTop -= this.refs.sections.offsetHeight;
   }
 
   pageDown() {
-    this.element.scrollTop += this.element.offsetHeight;
+    this.refs.sections.scrollTop += this.refs.sections.offsetHeight;
   }
 
   scrollToTop() {
-    this.element.scrollTop = 0;
+    this.refs.sections.scrollTop = 0;
   }
 
   scrollToBottom() {
-    this.element.scrollTop = this.element.scrollHeight;
+    this.refs.sections.scrollTop = this.refs.sections.scrollHeight;
   }
 }
 
