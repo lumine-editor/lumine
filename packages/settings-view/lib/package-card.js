@@ -1080,11 +1080,16 @@ export default class PackageCard {
     this.refs.uninstallButton.style.display = "none";
     const atomVersion = this.packageManager.normalizeVersion(atom.getVersion());
     if (!this.packageManager.satisfiesVersion(atomVersion, this.pack)) {
+      // Incompatible engine: keep the card in the list with a disabled Install.
+      // A catalog card can switch to another ref (whose engine may match), so it
+      // does not hunt the legacy registry for an older compatible version.
       this.hasCompatibleVersion = false;
       this.setNotInstalledStateButtons();
-      this.locateCompatiblePackageVersion(() => {
-        this.setNotInstalledStateButtons();
-      });
+      if (!this.pack.originKey) {
+        this.locateCompatiblePackageVersion(() => {
+          this.setNotInstalledStateButtons();
+        });
+      }
     } else {
       this.setNotInstalledStateButtons();
     }

@@ -13,7 +13,7 @@ function repositoryValue(repository) {
 
 function validateCommunityPackageMetadata(
   metadata,
-  { originKey, semanticTag = null, atomVersion = null } = {},
+  { originKey, semanticTag = null, atomVersion = null, allowIncompatible = false } = {},
 ) {
   if (!metadata || typeof metadata !== "object" || Array.isArray(metadata)) {
     throw new Error("Package manifest must contain an object.");
@@ -39,7 +39,15 @@ function validateCommunityPackageMetadata(
   if (typeof engine !== "string" || !semver.validRange(engine)) {
     throw new Error('Package manifest must contain a valid "engines.atom" range.');
   }
-  if (atomVersion && semver.valid(atomVersion) && !semver.satisfies(atomVersion, engine)) {
+  // An engine mismatch is a soft state during catalog hydration: the package is
+  // still shown (with its Install action disabled and switchable to another ref)
+  // rather than rejected. Installs and update checks pass this strictly.
+  if (
+    !allowIncompatible &&
+    atomVersion &&
+    semver.valid(atomVersion) &&
+    !semver.satisfies(atomVersion, engine)
+  ) {
     throw new Error(`Package requires Lumine ${engine}, but this version is ${atomVersion}.`);
   }
 

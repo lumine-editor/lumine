@@ -423,6 +423,37 @@ describe("PackageCard", function () {
     expect(card.refs.packageMessage.textContent).toBe("");
   });
 
+  it("greys Install for an incompatible catalog card but keeps the version switchable", function () {
+    setPackageStatusSpies({ installed: false, disabled: false });
+    spyOn(packageManager, "loadCompatiblePackageVersion");
+    card = new PackageCard(
+      {
+        name: "invert-colors",
+        version: "0.5.0",
+        repository: "asiloisad/pulsar-invert-colors",
+        originKey: "github.com/asiloisad/pulsar-invert-colors",
+        status: "ready",
+        engines: { atom: ">=100.0.0" },
+        selectedRef: { type: "latest", value: "v0.5.0" },
+        resolvedSha: "a".repeat(40),
+        refs: {
+          defaultBranch: "main",
+          headSha: "a".repeat(40),
+          tags: [{ name: "v0.5.0", sha: "a".repeat(40) }],
+        },
+      },
+      new SettingsView(),
+      packageManager,
+    );
+    jasmine.attachToDOM(card.element);
+    expect(card.refs.installButton).toBeVisible();
+    expect(card.refs.installButton).toHaveClass("disabled");
+    expect(card.installBlocked).toBe(true);
+    // The version selector still works, and the legacy registry is not queried.
+    expect(card.refs.versionValue.tagName).toBe("SELECT");
+    expect(packageManager.loadCompatiblePackageVersion).not.toHaveBeenCalled();
+  });
+
   describe("the Git install indicator", function () {
     const gitCard = (apmInstallSource) => {
       setPackageStatusSpies({ installed: true, disabled: false });

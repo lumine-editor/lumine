@@ -171,6 +171,43 @@ describe("CommunityPackageCatalogClient", function () {
     );
   });
 
+  it("shows an engine-incompatible package instead of rejecting it", function () {
+    const catalogUrl = "https://catalog.test/index.json";
+    const fetchImpl = jasmine.createSpy("fetchImpl").andCallFake((url) => {
+      if (url === catalogUrl) return Promise.resolve(textResponse(200, ["owner/package"]));
+      if (url.includes(`/${SHA_1}/package.json`)) {
+        return Promise.resolve(
+          textResponse(200, {
+            name: "sample-package",
+            version: "1.0.0",
+            repository: "https://github.com/owner/package.git",
+            engines: { atom: ">=999.0.0" },
+          }),
+        );
+      }
+      return Promise.resolve(textResponse(404, "not found"));
+    });
+    const client = new CommunityPackageCatalogClient({
+      fetchImpl,
+      packageManager: createPackageManager(),
+      storage: createStorage(),
+      atomVersion: () => "1.132.1",
+    });
+
+    waitsForPromise(() =>
+      client.loadAll([catalogUrl], { refresh: true }).then((catalog) => {
+        expect(catalog.packages[0]).toEqual(
+          jasmine.objectContaining({
+            name: "sample-package",
+            originKey: "github.com/owner/package",
+            status: "ready",
+          }),
+        );
+        expect(catalog.packages[0].engines).toEqual({ atom: ">=999.0.0" });
+      }),
+    );
+  });
+
   it("clears an earlier origin mismatch once a corrected release is published", function () {
     const catalogUrl = "https://catalog.test/sources.json";
     // v1.0.0 ships a manifest whose repository points at the wrong origin; a
