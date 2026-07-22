@@ -78,7 +78,7 @@ module.exports = {
         atom.workspace.open(`${CONFIG_URI}/packages`);
       },
       "settings-view:check-updates"() {
-        atom.workspace.open(`${CONFIG_URI}/install/check-updates`);
+        atom.workspace.open(`${CONFIG_URI}/update`);
       },
     });
 

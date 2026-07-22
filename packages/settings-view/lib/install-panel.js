@@ -4,7 +4,6 @@
 import path from "path";
 import etch from "@lumine-code/etch";
 import gitHubUrlInfo from "./github-url-info";
-import semver from "semver";
 
 // eslint-disable-next-line n/no-unpublished-require
 const { cloneUrlForRepository, parsePackageSource } = require("../../../src/package-source");
@@ -13,7 +12,7 @@ import { CompositeDisposable, Disposable, TextEditor } from "atom";
 
 import PackageCard from "./package-card";
 import ErrorView from "./error-view";
-import { packageOrigin, getInstalledPackageMetadata } from "./utils";
+import { packageOrigin } from "./utils";
 const { normalizeCatalogSource } = require("./community-package-catalog-client");
 
 const PackageNameRegex = /config\/install\/(?:package|theme):([a-z0-9-_]+)/i;
@@ -28,7 +27,6 @@ export default class InstallPanel {
     this.catalogClient = this.packageManager.getCatalogClient();
     this.pulsarClient = this.packageManager.getPulsarClient();
     this.catalogPackages = [];
-    this.updatePackages = [];
     this.catalogPackageCards = [];
     this.browsePackageCards = [];
     this.catalogFetched = false;
@@ -284,13 +282,6 @@ export default class InstallPanel {
                 >
                   Themes
                 </button>
-                <button
-                  ref="filterUpdatesButton"
-                  className="btn btn-default"
-                  onclick={() => this.setFilterType("updates")}
-                >
-                  Updates
-                </button>
               </div>
             </div>
 
@@ -334,10 +325,6 @@ export default class InstallPanel {
     }
 
     if (options && options.uri) {
-      if (/config\/install\/check-updates\b/.test(options.uri)) {
-        this.checkForUpdates();
-        return;
-      }
       const query = this.extractQueryFromURI(options.uri);
       if (query != null) {
         this.refs.searchEditor.setText(query);
@@ -362,49 +349,19 @@ export default class InstallPanel {
       all: this.refs.filterAllButton,
       packages: this.refs.filterPackagesButton,
       themes: this.refs.filterThemesButton,
-      updates: this.refs.filterUpdatesButton,
     };
     for (const [type, button] of Object.entries(buttons)) {
       button.classList.toggle("selected", type === filterType);
     }
-    if (filterType === "updates") {
-      // The Updates tab fetches only the installed packages, not the catalog.
-      this.updatePromise = this.showUpdates();
-    } else {
-      // performSearch renders the browse list (no query) or the filtered search
-      // results (query); no separate renderBrowseList call is needed.
-      this.performSearch();
-    }
+    // performSearch renders the browse list (no query) or the filtered search
+    // results (query); no separate renderBrowseList call is needed.
+    this.performSearch();
   }
 
   matchesFilter(pack) {
     if (this.filterType === "themes") return !!pack.theme;
     if (this.filterType === "packages") return !pack.theme;
-    if (this.filterType === "updates") {
-      return !!pack.latestSha || !!pack.suspiciousTagMove || this.hasNewerVersionInstalled(pack);
-    }
     return true;
-  }
-
-  getInstalledMetadata(name) {
-    return getInstalledPackageMetadata(name);
-  }
-
-  // True when the same package (by origin) is installed and the catalog
-  // describes a newer version.
-  hasNewerVersionInstalled(pack) {
-    if (!pack.version || !pack.repository) return false;
-    if (!this.packageManager.isPackageInstalled(pack.name)) return false;
-    const metadata = this.getInstalledMetadata(pack.name);
-    if (!metadata) return false;
-    const origin = packageOrigin(pack);
-    const installedOrigin = packageOrigin(metadata);
-    if (!origin || origin !== installedOrigin) return false;
-    return (
-      semver.valid(metadata.version) &&
-      semver.valid(pack.version) &&
-      semver.gt(pack.version, metadata.version)
-    );
   }
 
   performSearch() {
@@ -707,22 +664,6 @@ export default class InstallPanel {
   }
 
   renderBrowseList() {
-    // The Updates tab lists only the installed packages that have a newer
-    // version (gathered from their install receipts, not the catalog).
-    if (this.filterType === "updates") {
-      const updates = (this.updatePackages || [])
-        .slice()
-        .sort((left, right) => left.name.localeCompare(right.name));
-      const start = (this.page - 1) * this.pageSize;
-      this.renderCardList(
-        this.refs.browseContainer,
-        this.browsePackageCards,
-        updates.slice(start, start + this.pageSize),
-      );
-      this.updatePagination(updates.length);
-      return;
-    }
-
     const origins = new Set();
     const packages = this.catalogPackages
       .filter((pack) => this.matchesFilter(pack))
@@ -1010,75 +951,6 @@ export default class InstallPanel {
     this.catalogClient.cancel();
     this.refs.catalogProgress.textContent += " · cancelling…";
     this.refs.cancelFetchButton.disabled = true;
-  }
-
-  // Looks for updates to installed packages: refreshes the community catalogs
-  // and, independently, asks the Pulsar registry for the latest version of each
-  // installed package. Results are shown under the Updates filter.
-  // Public entry point (command / URI): open the Updates tab, which checks the
-  // installed packages for updates.
-  checkForUpdates() {
-    this.setFilterType("updates");
-    return this.updatePromise;
-  }
-
-  // Fetches updates for the installed packages only (no catalog fetch) and
-  // renders them under the Updates tab.
-  async showUpdates() {
-    if (this.loadingUpdates) return;
-    this.loadingUpdates = true;
-
-    // The Updates tab is about installed packages, not the catalog search.
-    this.refs.searchEditor.setText("");
-    this.clearSearchResults();
-    this.refs.browseArea.style.display = "";
-    this.refs.catalogProgress.textContent = "Checking installed packages for updates…";
-
-    try {
-      await this.loadUpdates();
-      this.renderBrowseList();
-      const count = (this.updatePackages || []).length;
-      this.refs.catalogProgress.textContent = count
-        ? `${count} update(s) available`
-        : "All installed packages are up to date.";
-    } finally {
-      this.loadingUpdates = false;
-    }
-  }
-
-  // Checks each installed Git package's receipt for a newer version.
-  async loadUpdates() {
-    const generation = (this.updateGeneration = (this.updateGeneration || 0) + 1);
-    this.updatePackages = [];
-    const packs = await this.packageManager.getGitPackageUpdates();
-    if (generation !== this.updateGeneration) return;
-    this.updatePackages = packs;
-    // Persist the freshly-fetched update data into the cache (and the in-memory
-    // catalog) so browse cards reflect it without a full catalog fetch.
-    this.catalogClient.mergeInstalledUpdates(packs);
-    this.mergeUpdatesIntoCatalog(packs);
-  }
-
-  mergeUpdatesIntoCatalog(packs) {
-    if (!packs.length || !this.catalogPackages.length) return;
-    const byOrigin = new Map();
-    for (const pack of packs) {
-      const key = packageOrigin(pack);
-      if (key) byOrigin.set(key, pack);
-    }
-    this.catalogPackages = this.catalogPackages.map((pack) => {
-      const update = byOrigin.get(packageOrigin(pack));
-      if (!update) return pack;
-      return {
-        ...pack,
-        latestSha: update.latestSha,
-        latestVersion: update.latestVersion,
-        resolvedRef: update.resolvedRef,
-        suspiciousTagMove: update.suspiciousTagMove,
-        originWarning: update.originWarning,
-        renamedPackage: update.renamedPackage,
-      };
-    });
   }
 
   didClickRestoreDefaults() {

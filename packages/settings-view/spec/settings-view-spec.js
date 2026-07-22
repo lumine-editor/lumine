@@ -416,9 +416,9 @@ describe("SettingsView", function () {
 
         waits(1);
         runs(function () {
-          // The legacy updates URI redirects to the Install panel.
+          // The legacy updates URI redirects to the Update panel.
           expect(settingsView.activePanel).toEqual({
-            name: "Install",
+            name: "Update",
             options: { uri: "atom://config/updates" },
           });
           expect(focusIsWithinActivePanel()).toBe(true);

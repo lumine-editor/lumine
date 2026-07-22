@@ -13,6 +13,7 @@ import GitSettingsPanel from "./git-settings-panel";
 import PackageDetailView from "./package-detail-view";
 import KeybindingsPanel from "./keybindings-panel";
 import InstallPanel from "./install-panel";
+import UpdatesPanel from "./updates-panel";
 import ThemesPanel from "./themes-panel";
 import InstalledPackagesPanel from "./installed-packages-panel";
 import UriHandlerPanel from "./uri-handler-panel";
@@ -180,6 +181,11 @@ export default class SettingsView {
       () => new InstalledPackagesPanel(this, this.packageManager),
     );
     this.addCorePanel("Themes", "paintcan", () => new ThemesPanel(this, this.packageManager));
+    this.addCorePanel(
+      "Update",
+      "cloud-download",
+      () => new UpdatesPanel(this, this.packageManager),
+    );
     this.addCorePanel("Install", "plus", () => new InstallPanel(this, this.packageManager));
 
     this.showDeferredPanel();
@@ -390,8 +396,8 @@ export default class SettingsView {
           back: atom.packages.getLoadedPackage(path2) ? "Packages" : null,
         });
       } else if (path1 === "updates") {
-        // The Updates tab was folded into the Install panel's Updates filter.
-        this.showPanel("Install", { uri });
+        // Backward-compatible alias for the Update panel.
+        this.showPanel("Update", { uri });
       } else {
         const panelName = path1[0].toUpperCase() + path1.slice(1);
         this.showPanel(panelName, { uri });
