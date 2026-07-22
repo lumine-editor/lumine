@@ -747,6 +747,59 @@ describe("PackageCard", function () {
     expect(card.refs.updateButton.textContent).toContain("Update to 1.2.0");
   });
 
+  it("offers Update and previews the selected version's description on an installed card", function () {
+    setPackageStatusSpies({ installed: true, disabled: false, hasSettings: false });
+    spyOn(packageManager, "inspectPackageUpdate").andReturn(
+      Promise.resolve({ name: "git-package", version: "2.0.0", description: "Two point oh" }),
+    );
+    card = new PackageCard(
+      {
+        name: "git-package",
+        version: "1.0.0",
+        description: "One point oh",
+        repository: "owner/git-package",
+        apmInstallSource: {
+          type: "git",
+          origin: "github.com/owner/git-package",
+          selector: { type: "tag", value: "v1.0.0" },
+          sha: "a".repeat(40),
+        },
+        refs: {
+          defaultBranch: "main",
+          headSha: "c".repeat(40),
+          tags: [
+            { name: "v2.0.0", sha: "b".repeat(40) },
+            { name: "v1.0.0", sha: "a".repeat(40) },
+          ],
+        },
+      },
+      new SettingsView(),
+      packageManager,
+    );
+    jasmine.attachToDOM(card.element);
+    expect(card.refs.packageDescription.textContent).toBe("One point oh");
+
+    card.applyInstalledVersionSelection({ type: "tag", value: "v2.0.0" });
+
+    // Synchronously flips to an update targeting the selected commit.
+    expect(card.refs.updateButton).toBeVisible();
+    expect(card.refs.updateButton.textContent).toContain("Update to 2.0.0");
+    expect(card.pack.latestSha).toBe("b".repeat(40));
+    const previewArgs = packageManager.inspectPackageUpdate.mostRecentCall.args;
+    expect(previewArgs[1]).toBe("b".repeat(40));
+    expect(previewArgs[2]).toEqual({ type: "tag", value: "v2.0.0" });
+
+    // The description is previewed from the selected version's manifest.
+    waitsFor(() => card.refs.packageDescription.textContent === "Two point oh");
+
+    runs(() => {
+      // Selecting the installed version again clears the update and restores it.
+      card.applyInstalledVersionSelection({ type: "tag", value: "v1.0.0" });
+      expect(card.refs.updateButton).not.toBeVisible();
+      expect(card.refs.packageDescription.textContent).toBe("One point oh");
+    });
+  });
+
   it("shows a badge", function () {
     const pack = {
       badges: [

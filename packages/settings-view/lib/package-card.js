@@ -397,6 +397,9 @@ export default class PackageCard {
     }
     const install = this.pack.apmInstallSource || {};
     const installedSha = install.sha;
+    if (this.installedDescription === undefined) {
+      this.installedDescription = this.pack.description || "";
+    }
     this.pack.selectedRef = selector;
     if (sha && installedSha && sha.toLowerCase() === installedSha.toLowerCase()) {
       this.newVersion = null;
@@ -404,6 +407,9 @@ export default class PackageCard {
       this.pack.latestSha = installedSha;
       this.pack.resolvedRef = null;
       this.pack.updatePolicy = undefined;
+      // Back on the installed version: cancel any pending preview and restore.
+      this.manifestPreviewId = (this.manifestPreviewId || 0) + 1;
+      this.setDescription(this.installedDescription);
     } else {
       this.pack.latestSha = sha;
       this.pack.resolvedRef = selector;
@@ -415,9 +421,31 @@ export default class PackageCard {
         this.newSha = sha || null;
         this.newVersion = null;
       }
+      this.previewSelectedManifest(sha, selector);
     }
     if (this.onPackUpdated) this.onPackUpdated(this.pack);
     this.updateInterfaceState();
+  }
+
+  setDescription(text) {
+    this.pack.description = text;
+    if (this.refs.packageDescription) this.refs.packageDescription.textContent = text || "";
+  }
+
+  // Fetch the selected commit's manifest so the description reflects the chosen
+  // version rather than the installed one. Best-effort: a network or validation
+  // failure leaves the current description in place, and a newer selection
+  // supersedes an in-flight fetch.
+  async previewSelectedManifest(sha, selector) {
+    if (!sha || !/^[0-9a-f]{40}$/i.test(sha)) return;
+    const requestId = (this.manifestPreviewId = (this.manifestPreviewId || 0) + 1);
+    try {
+      const metadata = await this.packageManager.inspectPackageUpdate(this.pack, sha, selector);
+      if (this.destroyed || requestId !== this.manifestPreviewId || !metadata) return;
+      if (metadata.description != null) this.setDescription(metadata.description);
+    } catch {
+      // Keep the current description if the selected manifest can't be read.
+    }
   }
 
   async selectRef(selector) {
