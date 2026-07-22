@@ -106,7 +106,7 @@
   background-color: var(--button-background-color);
   /* Hide the native dropdown arrow; the picker still opens on click. */
   appearance: none;
-  padding: 0 0.4em;
+  padding: 0.2em 0.5em;
 }
 
 .settings-view .package-version-select:hover,
