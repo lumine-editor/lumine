@@ -457,8 +457,14 @@ export default class PackageDetailView {
             <form className="section-container package-detail-view">
               <div className="container package-container">{packageCardView}</div>
 
-              <p ref="packageRepo" className="link icon icon-repo repo-link hidden" />
-              <p ref="startupTime" className="text icon icon-dashboard hidden" tabIndex="-1" />
+              <div className="package-detail-meta">
+                <p ref="packageRepo" className="link icon icon-repo repo-link hidden" />
+                <p
+                  ref="startupTime"
+                  className="text icon icon-dashboard startup-time hidden"
+                  tabIndex="-1"
+                />
+              </div>
 
               <div className="package-detail-actions">
                 <div ref="buttons" className="btn-wrap-group hidden">

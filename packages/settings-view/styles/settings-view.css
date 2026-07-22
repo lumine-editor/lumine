@@ -500,13 +500,14 @@
       text-align: center;
     }
 
-    /* README table of contents, published by the package detail view. */
+    /* README table of contents, published by the package detail view. It uses
+       the sidebar nav (nav-pills nav-stacked) styling, like the panels menu. */
     .config-toc {
-      padding: var(--component-padding);
       border-top: 1px solid var(--base-border-color);
+      padding-bottom: var(--component-padding);
 
       .config-toc-heading {
-        margin-bottom: calc(var(--component-padding) / 2);
+        margin: var(--component-padding) 15px calc(var(--component-padding) / 2);
         font-size: 0.9em;
         font-weight: bold;
         text-transform: uppercase;
@@ -515,39 +516,30 @@
 
       .config-toc-list {
         margin: 0;
-        padding: 0;
-        list-style: none;
       }
 
+      /* Nav supplies the padding/hover; only truncate long headers. */
       .config-toc-item > a {
-        display: block;
-        padding: 2px 0;
-        color: var(--text-color);
-        cursor: pointer;
         overflow: hidden;
         text-overflow: ellipsis;
         white-space: nowrap;
-
-        &:hover {
-          color: var(--text-color-highlight);
-          text-decoration: underline;
-        }
       }
 
-      .config-toc-level-2 {
-        padding-left: 1em;
+      /* Indent nested headers past the base 15px nav padding. */
+      .config-toc-level-2 > a {
+        padding-left: 27px;
       }
-      .config-toc-level-3 {
-        padding-left: 2em;
+      .config-toc-level-3 > a {
+        padding-left: 39px;
       }
-      .config-toc-level-4 {
-        padding-left: 3em;
+      .config-toc-level-4 > a {
+        padding-left: 51px;
       }
-      .config-toc-level-5 {
-        padding-left: 4em;
+      .config-toc-level-5 > a {
+        padding-left: 63px;
       }
-      .config-toc-level-6 {
-        padding-left: 5em;
+      .config-toc-level-6 > a {
+        padding-left: 75px;
       }
     }
 
@@ -804,6 +796,17 @@
       &:hover {
         cursor: pointer;
         text-decoration: underline;
+      }
+    }
+
+    /* Repository reference on the left, startup time pushed to the right. */
+    .package-detail-meta {
+      display: flex;
+      align-items: baseline;
+      flex-wrap: wrap;
+
+      .startup-time {
+        margin-left: auto;
       }
     }
   }

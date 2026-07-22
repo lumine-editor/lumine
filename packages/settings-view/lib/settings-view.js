@@ -495,7 +495,8 @@ export default class SettingsView {
     container.appendChild(heading);
 
     const list = document.createElement("ul");
-    list.className = "config-toc-list";
+    // Reuse the sidebar nav styling (like the panels menu).
+    list.className = "config-toc-list nav nav-pills nav-stacked";
     for (const entry of entries) {
       const item = document.createElement("li");
       item.className = `config-toc-item config-toc-level-${entry.level}`;
