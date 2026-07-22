@@ -83,6 +83,44 @@
   animation: settings-view-pulse 1s ease-in-out infinite;
 }
 
+.settings-view .catalog-progress {
+  min-height: 1.5em;
+}
+
+.settings-view .catalog-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--component-padding);
+  margin-top: calc(var(--component-padding) * 2);
+}
+
+.settings-view .package-ref-controls {
+  display: flex;
+  gap: var(--component-padding);
+  margin: var(--component-padding) 0;
+}
+
+.settings-view .package-ref-controls select {
+  max-width: 24em;
+}
+
+.settings-view .package-ref-controls .input-text {
+  max-width: 20em;
+}
+
+.settings-view .package-catalog-status {
+  display: block;
+  margin-top: calc(var(--component-padding) / 2);
+  color: var(--text-color-subtle);
+  overflow-wrap: anywhere;
+}
+
+.settings-view .package-catalog-status.status-error,
+.settings-view .package-catalog-status.status-stale {
+  color: var(--text-color-warning);
+}
+
 @keyframes settings-view-pulse {
   0%,
   100% {

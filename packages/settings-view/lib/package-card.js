@@ -13,6 +13,7 @@ import {
   repoUrlFromRepository,
   repoReferenceFromRepository,
   packageOrigin,
+  packagePanelKey,
   getInstalledPackageMetadata,
 } from "./utils";
 
@@ -31,6 +32,7 @@ export default class PackageCard {
     this.type = this.pack.theme ? "theme" : "package";
     this.name = this.pack.name;
     this.onSettingsView = options.onSettingsView;
+    this.onPackUpdated = options.onPackUpdated;
 
     if (this.pack.latestVersion !== this.pack.version) {
       this.newVersion = this.pack.latestVersion;
@@ -60,7 +62,10 @@ export default class PackageCard {
     // Only strip the install/uninstall buttons for the genuine bundled package.
     // A community package that merely shares a bundled package's name keeps its
     // buttons so the conflict state can show a disabled Install with a reason.
-    if (atom.packages.isBundledPackage(this.pack.name) && !this.installedOriginDiffers()) {
+    if (
+      (this.pack.packageKind === "builtin" || atom.packages.isBundledPackage(this.pack.name)) &&
+      !this.installedOriginDiffers()
+    ) {
       this.refs.installButtonGroup.remove();
       this.refs.uninstallButton.remove();
     }
@@ -115,9 +120,49 @@ export default class PackageCard {
               </a>
             ) : null}
           </h4>
+          {this.pack.refs ? (
+            <div className="package-ref-controls" onclick={(event) => event.stopPropagation()}>
+              <select
+                ref="refSelector"
+                className="form-control"
+                value={this.selectedRefValue()}
+                disabled={this.pack.status === "validating"}
+                onfocus={this.loadBranches.bind(this)}
+                onchange={this.didChangeRef.bind(this)}
+              >
+                {this.refOptions()}
+              </select>
+              <input
+                ref="commitInput"
+                className="input-text"
+                type="text"
+                placeholder="40-character commit SHA"
+                onclick={(event) => event.stopPropagation()}
+                onkeydown={this.didConfirmCommit.bind(this)}
+              />
+            </div>
+          ) : null}
           <span ref="packageDescription" className="package-description">
             {description}
           </span>
+          {this.pack.originKey ? (
+            <span className={`package-catalog-status status-${this.pack.status || "ready"}`}>
+              {this.pack.originKey}
+              {this.pack.resolvedSha ? ` · ${this.pack.resolvedSha.slice(0, 8)}` : ""}
+              {(this.pack.catalogSources || []).length
+                ? ` · ${(this.pack.catalogSources || []).length} catalog(s)`
+                : ""}
+              {this.pack.error ? ` · ${this.pack.error}` : ""}
+            </span>
+          ) : null}
+          {this.catalogProvenanceText() ? (
+            <span className="package-catalog-status package-catalog-provenance">
+              {this.catalogProvenanceText()}
+            </span>
+          ) : null}
+          {this.pack.originWarning ? (
+            <span className="package-catalog-status status-stale">{this.pack.originWarning}</span>
+          ) : null}
           <div ref="packageMessage" className="package-message" />
         </div>
 
@@ -196,6 +241,99 @@ export default class PackageCard {
     );
   }
 
+  selectedRefValue() {
+    const selected = this.pack.selectedRef;
+    return selected ? `${selected.type}:${selected.value || ""}` : "";
+  }
+
+  catalogProvenanceText() {
+    const selectors = this.pack.catalogSelectors || [];
+    if (selectors.length) {
+      const sources = selectors.map(({ catalogSource, selector }) => {
+        const ref =
+          !selector || selector.type === "latest"
+            ? "latest stable/default branch"
+            : `${selector.type}:${selector.value}`;
+        return `${catalogSource} (${ref})`;
+      });
+      return `Catalogs: ${sources.join(" · ")}${
+        this.pack.selectorConflict ? " · selector conflict; the first catalog wins" : ""
+      }`;
+    }
+    return (this.pack.catalogSources || []).length
+      ? `Catalogs: ${this.pack.catalogSources.join(" · ")}`
+      : "";
+  }
+
+  refOptions() {
+    const refs = this.pack.refs || {};
+    const options = [];
+    if (refs.latestStable) {
+      options.push(
+        <option value={`latest:${refs.latestStable.name}`}>
+          {`Latest stable — ${refs.latestStable.name}`}
+        </option>,
+      );
+    }
+    if (refs.defaultBranch) {
+      options.push(
+        <option value={`default:${refs.defaultBranch}`}>
+          {`Default branch — ${refs.defaultBranch}`}
+        </option>,
+      );
+    }
+    for (const tag of refs.tags || []) {
+      options.push(<option value={`tag:${tag.name}`}>{`Tag — ${tag.name}`}</option>);
+    }
+    for (const branch of refs.branches || []) {
+      options.push(<option value={`branch:${branch.name}`}>{`Branch — ${branch.name}`}</option>);
+    }
+    return options;
+  }
+
+  async loadBranches() {
+    if (!this.pack.refs || this.pack.refs.branches) return;
+    try {
+      this.pack = await this.packageManager.getCatalogClient().loadBranches(this.pack);
+      await etch.update(this);
+    } catch (error) {
+      this.pack = { ...this.pack, status: "stale", error: error.message };
+      await etch.update(this);
+    }
+  }
+
+  async didChangeRef(event) {
+    event.stopPropagation();
+    const [type, ...valueParts] = event.target.value.split(":");
+    await this.selectRef({ type, value: valueParts.join(":") });
+  }
+
+  async didConfirmCommit(event) {
+    if (event.key !== "Enter") return;
+    event.stopPropagation();
+    const value = event.target.value.trim();
+    if (!/^[0-9a-f]{40}$/i.test(value)) {
+      this.pack = { ...this.pack, status: "error", error: "Enter a complete 40-character SHA." };
+      await etch.update(this);
+      return;
+    }
+    await this.selectRef({ type: "commit", value });
+  }
+
+  async selectRef(selector) {
+    this.pack = { ...this.pack, status: "validating", error: null };
+    await etch.update(this);
+    try {
+      this.pack = await this.packageManager.getCatalogClient().selectRef(this.pack, selector);
+    } catch (error) {
+      this.pack = { ...this.pack, status: "error", error: error.message };
+    }
+    this.name = this.pack.name;
+    if (this.onPackUpdated) this.onPackUpdated(this.pack);
+    await etch.update(this);
+    this.updateInterfaceState();
+  }
+
   locateCompatiblePackageVersion(callback) {
     this.packageManager.loadCompatiblePackageVersion(this.pack.name, (err, pack) => {
       if (err != null) {
@@ -239,7 +377,7 @@ export default class PackageCard {
         event.stopPropagation();
         // The installed package merely shares its name — don't link to it.
         if (this.originConflict) return;
-        this.settingsView.showPanel(this.pack.name, {
+        this.settingsView.showPanel(packagePanelKey(this.pack), {
           back: options ? options.back : null,
           pack: this.pack,
         });
@@ -436,6 +574,9 @@ export default class PackageCard {
   }
 
   loadCachedMetadata() {
+    // Hydrated community cards must not fall back to the legacy registry for
+    // avatars or other same-name metadata.
+    if (this.pack.originKey) return;
     if (repoUrlFromRepository(this.pack.repository) === atom.branding.urlCoreRepo) {
       // Don't hit the web for our bundled packages. Just use the local image.
       let avatarPath = path.join(process.resourcesPath, "lumine.png");
@@ -618,6 +759,11 @@ export default class PackageCard {
     return `No version of this package is compatible with your Lumine version. It requires ${engine}.`;
   }
 
+  validationBlockingMessage() {
+    if (!this.pack.originKey || !this.pack.status || this.pack.status === "ready") return null;
+    return this.pack.error || "Package metadata is still being validated.";
+  }
+
   // The installed package merely shares its name with this card's package.
   // Keep Install visible but disabled — installing would overwrite the
   // unrelated package — and explain why on hover. Uninstall/settings stay
@@ -628,14 +774,23 @@ export default class PackageCard {
     this.refs.packageActionButtonGroup.style.display = "none";
     this.refs.installButtonGroup.style.display = "";
 
+    const validationError = this.validationBlockingMessage();
+    if (validationError) {
+      this.refs.installButton.style.display = "";
+      this.refs.replaceButton.style.display = "none";
+      this.setInstallNote(validationError, true);
+      return;
+    }
+
     if (atom.packages.isBundledPackage(this.pack.name)) {
       // The name belongs to a bundled package, which cannot be uninstalled — so
       // Replace is impossible. Keep a disabled Install with the reason.
-      this.refs.installButton.style.display = "";
-      this.refs.replaceButton.style.display = "none";
+      this.refs.installButton.style.display = "none";
+      this.refs.replaceButton.style.display = "";
+      this.refs.replaceButton.textContent = "Override";
       this.setInstallNote(
-        `“${this.pack.name}” is a bundled Lumine package and cannot be replaced.`,
-        true,
+        `Installing this package will shadow the bundled “${this.pack.name}” package.`,
+        false,
       );
       return;
     }
@@ -644,6 +799,7 @@ export default class PackageCard {
     // Replace; the reason is on hover.
     this.refs.installButton.style.display = "none";
     this.refs.replaceButton.style.display = "";
+    this.refs.replaceButton.textContent = "Replace";
     this.setInstallNote(
       `A different package named “${this.pack.name}” is already installed. Replace uninstalls it and installs this one.`,
       true,
@@ -729,7 +885,12 @@ export default class PackageCard {
     // shows a normal Install and no Replace.
     this.refs.replaceButton.style.display = "none";
     this.refs.installButton.style.display = "";
-    if (!this.hasCompatibleVersion) {
+    const validationError = this.validationBlockingMessage();
+    if (validationError) {
+      this.setInstallNote(validationError, true);
+      this.refs.installButtonGroup.style.display = "";
+      this.refs.updateButtonGroup.style.display = "none";
+    } else if (!this.hasCompatibleVersion) {
       // No compatible version: show a disabled Install with the reason on hover.
       this.setInstallNote(this.incompatibleMessage(), true);
       this.refs.installButtonGroup.style.display = "";
@@ -959,41 +1120,22 @@ export default class PackageCard {
   replace() {
     const button = this.refs.replaceButton;
     if (button.disabled) return;
-    const installedMetadata = this.getInstalledMetadata();
-    const occupant = {
-      name: this.pack.name,
-      theme: installedMetadata ? installedMetadata.theme : this.pack.theme,
-    };
     button.disabled = true;
     button.classList.add("is-installing");
-    this.packageManager.uninstall(occupant, (uninstallError) => {
-      if (uninstallError != null) {
-        button.disabled = false;
-        button.classList.remove("is-installing");
-        console.error(
-          `Uninstalling ${this.type} ${this.pack.name} for replacement failed`,
-          uninstallError.stack != null ? uninstallError.stack : uninstallError,
-          uninstallError.stderr,
-        );
-        return;
-      }
-      // The slot is free now; install this package. The install/uninstall events
-      // re-render the card, so the Replace button is superseded automatically.
-      this.originConflict = false;
-      this.installBlocked = false;
-      this.packageManager.install(
-        this.installablePack != null ? this.installablePack : this.pack,
-        (installError) => {
-          if (installError != null) {
-            console.error(
-              `Installing ${this.type} ${this.pack.name} failed`,
-              installError.stack != null ? installError.stack : installError,
-              installError.stderr,
-            );
-          }
-        },
-      );
-    });
+    this.packageManager.replace(
+      this.installablePack != null ? this.installablePack : this.pack,
+      (installError) => {
+        if (installError != null) {
+          button.disabled = false;
+          button.classList.remove("is-installing");
+          console.error(
+            `Replacing ${this.type} ${this.pack.name} failed`,
+            installError.stack != null ? installError.stack : installError,
+            installError.stderr,
+          );
+        }
+      },
+    );
   }
 
   update() {

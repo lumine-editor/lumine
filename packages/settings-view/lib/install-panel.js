@@ -34,6 +34,9 @@ export default class InstallPanel {
     this.catalogFetched = false;
     this.sourceEditors = [];
     this.filterType = "all";
+    this.page = 1;
+    this.pageSize = 50;
+    this.searchPackages = [];
     this.atomIoURL = "https://github.com";
 
     etch.initialize(this);
@@ -41,7 +44,7 @@ export default class InstallPanel {
     this.refs.searchMessage.style.display = "none";
 
     this.refs.searchEditor.setPlaceholderText("Search community packages or enter owner/repo");
-    this.refs.catalogEditor.setPlaceholderText("owner/catalog, index URL, or local catalog path");
+    this.refs.catalogEditor.setPlaceholderText("owner/catalog or sources.json URL");
 
     this.disposables.add(atom.tooltips.add(this.refs.addCatalogButton, { title: "Add catalog" }));
     this.disposables.add(
@@ -122,6 +125,7 @@ export default class InstallPanel {
         // Sources changed — re-fetch on the next search instead of reusing the
         // data fetched from the old source list.
         this.catalogFetched = false;
+        this.catalogPromise = this.loadCatalog({ cacheOnly: true });
       }),
     );
     this.disposables.add(
@@ -207,6 +211,14 @@ export default class InstallPanel {
                     Fetch
                   </button>
                   <button
+                    ref="cancelFetchButton"
+                    className="btn icon icon-x"
+                    style={{ display: "none" }}
+                    onclick={this.didClickCancelFetch.bind(this)}
+                  >
+                    Cancel
+                  </button>
+                  <button
                     ref="restoreDefaultsButton"
                     className="btn icon icon-history"
                     onclick={this.didClickRestoreDefaults.bind(this)}
@@ -224,6 +236,7 @@ export default class InstallPanel {
                   <span>Include results from the Pulsar package registry</span>
                 </label>
               </div>
+              <div ref="catalogProgress" className="catalog-progress text-subtle" />
               <div ref="catalogFetchErrors" />
               <div
                 ref="catalogSourceError"
@@ -296,6 +309,19 @@ export default class InstallPanel {
             <div ref="browseArea" className="browse-area">
               <div ref="browseContainer" className="container package-container" />
             </div>
+            <div ref="pagination" className="catalog-pagination" style={{ display: "none" }}>
+              <button
+                ref="previousPageButton"
+                className="btn"
+                onclick={this.previousPage.bind(this)}
+              >
+                Previous
+              </button>
+              <span ref="pageStatus" />
+              <button ref="nextPageButton" className="btn" onclick={this.nextPage.bind(this)}>
+                Next
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -303,16 +329,15 @@ export default class InstallPanel {
   }
 
   beforeShow(options) {
-    // Fetch the community catalogs the first time the panel is shown, so the
-    // browse list is populated on open instead of waiting for a search or a
-    // manual Fetch click. The in-memory cache means this hits the network once
-    // per window and is reused (within TTL) by later loads. Starting it here,
-    // before the URI handling below, lets any incoming search reuse this fetch
-    // rather than triggering its own.
+    // Show the persistent cache immediately. On the first run, when no cache
+    // exists, begin a progressive refresh before handling an incoming search.
     if (!this.initialFetchStarted) {
       this.initialFetchStarted = true;
       if (!this.catalogFetched && this.getCatalogSources().length) {
-        this.catalogPromise = this.loadCatalog();
+        this.catalogPromise = this.loadCatalog({ cacheOnly: true }).then((catalog) => {
+          if (catalog.packages.length === 0) return this.loadCatalog({ refresh: true });
+          return catalog;
+        });
       }
     }
 
@@ -340,6 +365,7 @@ export default class InstallPanel {
 
   setFilterType(filterType) {
     this.filterType = filterType;
+    this.page = 1;
     const buttons = {
       all: this.refs.filterAllButton,
       packages: this.refs.filterPackagesButton,
@@ -356,7 +382,9 @@ export default class InstallPanel {
   matchesFilter(pack) {
     if (this.filterType === "themes") return !!pack.theme;
     if (this.filterType === "packages") return !pack.theme;
-    if (this.filterType === "updates") return this.hasNewerVersionInstalled(pack);
+    if (this.filterType === "updates") {
+      return !!pack.latestSha || !!pack.suspiciousTagMove || this.hasNewerVersionInstalled(pack);
+    }
     return true;
   }
 
@@ -384,6 +412,7 @@ export default class InstallPanel {
   performSearch() {
     // Git refs, and paths on some Git servers, are case-sensitive.
     const query = this.refs.searchEditor.getText().trim();
+    this.page = 1;
     if (query) {
       // Download the catalogs on the first search if the user never clicked
       // Fetch — otherwise a search would only surface live Pulsar results and
@@ -396,6 +425,7 @@ export default class InstallPanel {
     } else {
       this.clearSearchResults();
       this.refs.browseArea.style.display = "";
+      this.renderBrowseList();
     }
   }
 
@@ -446,9 +476,28 @@ export default class InstallPanel {
       this.currentGitPackageCard.destroy();
     }
 
-    this.currentGitPackageCard = this.getPackageCardView(pack);
+    const pendingPack = {
+      ...pack,
+      originKey: packageOrigin(pack),
+      status: "validating",
+      refs: { tags: [], branches: null },
+    };
+    this.currentGitPackageCard = this.getPackageCardView(pendingPack);
+    this.updatePagination(0);
     this.currentGitPackageCard.displayGitPackageInstallInformation();
     this.replaceCurrentGitPackageCardView();
+
+    if (typeof this.catalogClient.hydrateManualSource === "function") {
+      this.catalogClient.hydrateManualSource(pack.installSource).then(
+        (hydrated) => this.updateGitPackageCard({ ...pack, ...hydrated }),
+        (error) =>
+          this.updateGitPackageCard({
+            ...pendingPack,
+            status: "error",
+            error: error.message,
+          }),
+      );
+    }
   }
 
   updateGitPackageCard(pack) {
@@ -484,55 +533,98 @@ export default class InstallPanel {
   }
 
   getPackageCardView(pack) {
-    return new PackageCard(pack, this.settingsView, this.packageManager, { back: "Install" });
+    return new PackageCard(pack, this.settingsView, this.packageManager, {
+      back: "Install",
+      onPackUpdated: (updatedPack) => this.rememberSelectedPack(updatedPack),
+    });
+  }
+
+  rememberSelectedPack(updatedPack) {
+    const origin = packageOrigin(updatedPack);
+    this.catalogPackages = this.catalogPackages.map((pack) =>
+      packageOrigin(pack) === origin ? updatedPack : pack,
+    );
+    this.searchPackages = this.searchPackages.map((pack) =>
+      packageOrigin(pack) === origin ? updatedPack : pack,
+    );
   }
 
   async loadCatalog({ refresh = false, cacheOnly = false } = {}) {
-    // A non-cache load hits the network — mark the catalogs as fetched so the
-    // first search doesn't trigger a redundant auto-fetch.
     if (!cacheOnly) this.catalogFetched = true;
     const generation = (this.catalogGeneration = (this.catalogGeneration || 0) + 1);
+    if (!cacheOnly) this.catalogIndexing = true;
     const sources = this.getCatalogSources();
-    this.clearPackageCards(this.browsePackageCards);
-    this.refs.browseContainer.innerHTML = "";
     this.refs.catalogFetchErrors.innerHTML = "";
-
-    const loaded = await Promise.all(
-      sources.map(async (source) => {
-        try {
-          return {
-            source,
-            catalog: await this.catalogClient.load(source, { refresh, cacheOnly }),
-          };
-        } catch (error) {
-          return { source, error };
-        }
-      }),
-    );
-    if (generation !== this.catalogGeneration) return { packages: this.catalogPackages };
-
-    // Packages are deduplicated by repository, so the same name published from
-    // different repositories is kept; earlier catalogs win on identical repos.
-    const origins = new Set();
-    this.catalogPackages = [];
-    for (const result of loaded) {
-      if (result.error) {
-        const error = new Error(`${result.source}: ${result.error.message}`);
-        error.stderr = result.error.stderr;
-        this.refs.catalogFetchErrors.appendChild(new ErrorView(this.packageManager, error).element);
-        continue;
-      }
-      if (!result.catalog) continue;
-      for (const pack of result.catalog.packages) {
-        const key = packageOrigin(pack);
-        if (key && origins.has(key)) continue;
-        if (key) origins.add(key);
-        this.catalogPackages.push(pack);
-      }
+    if (refresh) {
+      this.refs.fetchButton.classList.add("is-checking");
+      this.refs.cancelFetchButton.style.display = "";
+      this.refs.catalogProgress.textContent = `Refreshing ${this.catalogPackages.length} cached package(s)…`;
     }
 
-    this.renderBrowseList();
-    return { schemaVersion: 1, packages: this.catalogPackages };
+    const progressive = new Map(this.catalogPackages.map((pack) => [packageOrigin(pack), pack]));
+    let renderTimer = null;
+    const scheduleRender = () => {
+      if (renderTimer) return;
+      renderTimer = setTimeout(() => {
+        renderTimer = null;
+        if (generation !== this.catalogGeneration) return;
+        this.catalogPackages = Array.from(progressive.values());
+        const query = this.refs.searchEditor.getText().trim();
+        if (query && this.catalogIndexing) this.renderIncompleteSearch(query);
+        else this.renderBrowseList();
+      }, 50);
+    };
+
+    try {
+      const result = await this.catalogClient.loadAll(sources, {
+        refresh,
+        cacheOnly,
+        onProgress: ({ processed, total, errors }) => {
+          if (generation !== this.catalogGeneration) return;
+          this.refs.catalogProgress.textContent = `${processed} / ${total} processed · ${errors} error(s)`;
+        },
+        onRecord: (pack) => {
+          progressive.set(packageOrigin(pack), pack);
+          scheduleRender();
+        },
+      });
+      if (generation !== this.catalogGeneration) return { packages: this.catalogPackages };
+      if (renderTimer) {
+        clearTimeout(renderTimer);
+        renderTimer = null;
+      }
+      this.catalogPackages = result.packages;
+      this.page = Math.min(
+        this.page,
+        Math.max(1, Math.ceil(this.catalogPackages.length / this.pageSize)),
+      );
+      this.renderBrowseList();
+      const stamp = result.lastFetch ? new Date(result.lastFetch).toLocaleString() : "never";
+      this.refs.catalogProgress.textContent = `${result.packages.length} package(s) · last Fetch ${stamp}${
+        result.cancelled ? " · cancelled" : ""
+      }${
+        result.pendingSources && result.pendingSources.length
+          ? ` · ${result.pendingSources.length} source(s) pending Fetch`
+          : ""
+      }`;
+      for (const catalogError of result.errors || []) {
+        const error = new Error(`${catalogError.source}: ${catalogError.message}`);
+        this.refs.catalogFetchErrors.appendChild(new ErrorView(this.packageManager, error).element);
+      }
+      return { schemaVersion: 2, packages: this.catalogPackages };
+    } catch (error) {
+      if (generation === this.catalogGeneration) {
+        this.refs.catalogFetchErrors.appendChild(new ErrorView(this.packageManager, error).element);
+      }
+      return { schemaVersion: 2, packages: this.catalogPackages };
+    } finally {
+      if (generation === this.catalogGeneration) {
+        this.catalogIndexing = false;
+        this.refs.fetchButton.classList.remove("is-checking");
+        this.refs.cancelFetchButton.style.display = "none";
+        this.refs.cancelFetchButton.disabled = false;
+      }
+    }
   }
 
   renderBrowseList() {
@@ -556,11 +648,38 @@ export default class InstallPanel {
           left.name.localeCompare(right.name) ||
           packageOrigin(left).localeCompare(packageOrigin(right)),
       );
-    for (const pack of packages) {
+    const start = (this.page - 1) * this.pageSize;
+    for (const pack of packages.slice(start, start + this.pageSize)) {
       const card = this.getPackageCardView(pack);
       this.browsePackageCards.push(card);
       this.addPackageCardView(this.refs.browseContainer, card);
     }
+    this.updatePagination(packages.length);
+  }
+
+  updatePagination(total) {
+    const pages = Math.max(1, Math.ceil(total / this.pageSize));
+    this.page = Math.min(this.page, pages);
+    this.refs.pagination.style.display = total > this.pageSize ? "" : "none";
+    this.refs.pageStatus.textContent = `Page ${this.page} of ${pages} · ${total} result(s)`;
+    this.refs.previousPageButton.disabled = this.page <= 1;
+    this.refs.nextPageButton.disabled = this.page >= pages;
+  }
+
+  previousPage() {
+    if (this.page <= 1) return;
+    this.page--;
+    this.renderActivePage();
+  }
+
+  nextPage() {
+    this.page++;
+    this.renderActivePage();
+  }
+
+  renderActivePage() {
+    if (this.refs.searchEditor.getText().trim()) this.renderSearchList(this.searchPackages);
+    else this.renderBrowseList();
   }
 
   isPulsarSearchEnabled() {
@@ -593,7 +712,6 @@ export default class InstallPanel {
       .sort(
         (left, right) => right.score - left.score || left.pack.name.localeCompare(right.pack.name),
       )
-      .slice(0, 25)
       .map(({ pack }) => pack);
   }
 
@@ -602,9 +720,26 @@ export default class InstallPanel {
     if (key && origins.has(key)) return;
     if (key) origins.add(key);
     results.push(pack);
-    const card = this.getPackageCardView(pack);
-    this.catalogPackageCards.push(card);
-    this.addPackageCardView(this.refs.resultsContainer, card);
+  }
+
+  renderSearchList(packages) {
+    this.clearPackageCards(this.catalogPackageCards);
+    this.refs.resultsContainer.innerHTML = "";
+    const start = (this.page - 1) * this.pageSize;
+    for (const pack of packages.slice(start, start + this.pageSize)) {
+      const card = this.getPackageCardView(pack);
+      this.catalogPackageCards.push(card);
+      this.addPackageCardView(this.refs.resultsContainer, card);
+    }
+    this.updatePagination(packages.length);
+  }
+
+  renderIncompleteSearch(query) {
+    this.searchPackages = this.scoreCatalog(query);
+    this.renderSearchList(this.searchPackages);
+    this.refs.searchMessage.textContent =
+      "Catalog indexing is still in progress; these search results are incomplete.";
+    this.refs.searchMessage.style.display = "";
   }
 
   clearPulsarError() {
@@ -625,8 +760,10 @@ export default class InstallPanel {
     this.refs.searchMessage.style.display = "none";
     this.clearPulsarError();
 
+    if (this.catalogIndexing) this.renderIncompleteSearch(query);
     await this.catalogPromise;
     if (generation !== this.searchGeneration) return [];
+    this.refs.searchMessage.style.display = "none";
 
     // Local community catalog results first, deduplicated by repository.
     const origins = new Set();
@@ -640,6 +777,15 @@ export default class InstallPanel {
       let pulsarResults = [];
       try {
         pulsarResults = await this.pulsarClient.search(query);
+        pulsarResults = (
+          await Promise.all(
+            pulsarResults.map((pack) =>
+              this.catalogClient
+                .hydrateSource(pack.installSource || pack.repository, "pulsar")
+                .catch(() => null),
+            ),
+          )
+        ).filter(Boolean);
       } catch (error) {
         if (generation === this.searchGeneration) {
           this.pulsarErrorElement = new ErrorView(
@@ -656,9 +802,13 @@ export default class InstallPanel {
     }
 
     if (results.length === 0) {
+      this.searchPackages = [];
+      this.updatePagination(0);
       this.showGitHubOnlyMessage(query);
       return [];
     }
+    this.searchPackages = results;
+    this.renderSearchList(results);
     return results;
   }
 
@@ -744,6 +894,12 @@ export default class InstallPanel {
     this.catalogPromise = this.loadCatalog({ refresh: true });
   }
 
+  didClickCancelFetch() {
+    this.catalogClient.cancel();
+    this.refs.catalogProgress.textContent += " · cancelling…";
+    this.refs.cancelFetchButton.disabled = true;
+  }
+
   // Looks for updates to installed packages: refreshes the community catalogs
   // and, independently, asks the Pulsar registry for the latest version of each
   // installed package. Results are shown under the Updates filter.
@@ -779,13 +935,9 @@ export default class InstallPanel {
   async loadPulsarUpdates() {
     const generation = (this.pulsarUpdateGeneration = (this.pulsarUpdateGeneration || 0) + 1);
     this.pulsarUpdatePackages = [];
-    if (!this.isPulsarSearchEnabled()) return;
-    const installed = this.packageManager.getLocalPackages().git;
-    const packs = await Promise.all(
-      installed.map((pack) => this.pulsarClient.getPackage(pack.name).catch(() => null)),
-    );
+    const packs = await this.packageManager.getGitPackageUpdates();
     if (generation !== this.pulsarUpdateGeneration) return;
-    this.pulsarUpdatePackages = packs.filter((pack) => pack && this.hasNewerVersionInstalled(pack));
+    this.pulsarUpdatePackages = packs;
   }
 
   didClickRestoreDefaults() {

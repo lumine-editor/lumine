@@ -105,6 +105,25 @@ describe("PackageCard", function () {
     });
   });
 
+  it("does not query the legacy avatar API for a hydrated community card", function () {
+    setPackageStatusSpies({ installed: false, disabled: false });
+    const client = { avatar: jasmine.createSpy("avatar") };
+    spyOn(packageManager, "getClient").andReturn(client);
+
+    card = new PackageCard(
+      {
+        name: "sample-package",
+        repository: "owner/sample-package",
+        originKey: "github.com/owner/sample-package",
+        status: "ready",
+      },
+      new SettingsView(),
+      packageManager,
+    );
+
+    expect(client.avatar).not.toHaveBeenCalled();
+  });
+
   describe("directory name mismatch", function () {
     it("warns when the install directory does not match the package name", function () {
       setPackageStatusSpies({ installed: true, disabled: false });
@@ -148,8 +167,7 @@ describe("PackageCard", function () {
         version: "1.0.0",
         apmInstallSource: { type: "git", origin: "author-a/linter" },
       });
-      const uninstallSpy = spyOn(packageManager, "uninstall").andCallFake((pack, cb) => cb());
-      const installSpy = spyOn(packageManager, "install");
+      const replaceSpy = spyOn(packageManager, "replace");
 
       card = new PackageCard(
         { name: "linter", repository: "author-b/linter", installSource: "author-b/linter" },
@@ -163,9 +181,8 @@ describe("PackageCard", function () {
 
       card.refs.replaceButton.click();
 
-      expect(uninstallSpy).toHaveBeenCalled();
-      expect(uninstallSpy.mostRecentCall.args[0].name).toBe("linter");
-      expect(installSpy).toHaveBeenCalled();
+      expect(replaceSpy).toHaveBeenCalled();
+      expect(replaceSpy.mostRecentCall.args[0].name).toBe("linter");
     });
 
     it("hides Replace for a normal installable package", function () {
@@ -205,6 +222,47 @@ describe("PackageCard", function () {
     });
   });
 
+  describe("Git ref selection", function () {
+    it("shows virtual latest/default choices plus every cached tag and branch", function () {
+      setPackageStatusSpies({ installed: false, disabled: false });
+      card = new PackageCard(
+        {
+          name: "ref-package",
+          repository: "owner/ref-package",
+          installSource: "owner/ref-package",
+          originKey: "github.com/owner/ref-package",
+          status: "ready",
+          engines: { atom: "*" },
+          selectedRef: { type: "latest", value: "v2.0.0" },
+          resolvedSha: "a".repeat(40),
+          refs: {
+            latestStable: { name: "v2.0.0", sha: "a".repeat(40) },
+            defaultBranch: "main",
+            tags: [
+              { name: "v2.0.0", sha: "a".repeat(40) },
+              { name: "nightly", sha: "b".repeat(40) },
+            ],
+            branches: [
+              { name: "main", sha: "a".repeat(40) },
+              { name: "Next", sha: "b".repeat(40) },
+            ],
+          },
+        },
+        new SettingsView(),
+        packageManager,
+      );
+      const labels = Array.from(card.refs.refSelector.options, ({ textContent }) => textContent);
+      expect(labels).toEqual([
+        "Latest stable — v2.0.0",
+        "Default branch — main",
+        "Tag — v2.0.0",
+        "Tag — nightly",
+        "Branch — main",
+        "Branch — Next",
+      ]);
+    });
+  });
+
   it("marks Pulsar-sourced packages with a purple install action", function () {
     setPackageStatusSpies({ installed: false, disabled: false });
     card = new PackageCard(
@@ -225,6 +283,30 @@ describe("PackageCard", function () {
     );
     jasmine.attachToDOM(card.element);
     expect(card.refs.repoLink.textContent).toBe("author-two/twin");
+  });
+
+  it("shows complete catalog provenance and selector conflicts", function () {
+    setPackageStatusSpies({ installed: false, disabled: false });
+    card = new PackageCard(
+      {
+        name: "twin",
+        repository: "author/twin",
+        originKey: "github.com/author/twin",
+        status: "ready",
+        catalogSelectors: [
+          { catalogSource: "first/catalog", selector: { type: "latest", value: null } },
+          { catalogSource: "second/catalog", selector: { type: "branch", value: "Next" } },
+        ],
+        selectorConflict: true,
+      },
+      new SettingsView(),
+      packageManager,
+    );
+
+    const provenance = card.element.querySelector(".package-catalog-provenance").textContent;
+    expect(provenance).toContain("first/catalog");
+    expect(provenance).toContain("second/catalog (branch:Next)");
+    expect(provenance).toContain("first catalog wins");
   });
 
   it("disables install with a hover note when no compatible version exists", function () {
@@ -495,7 +577,7 @@ describe("PackageCard", function () {
       expect(card.refs.packageMessage.textContent).toBe("");
     });
 
-    it("keeps a disabled install button when the name matches a bundled package from another origin", function () {
+    it("offers Override when the name matches a bundled package from another origin", function () {
       setPackageStatusSpies({ installed: true, disabled: false, hasSettings: false });
       spyOn(PackageCard.prototype, "getInstalledMetadata").andReturn({
         name: "search-panel",
@@ -507,9 +589,35 @@ describe("PackageCard", function () {
         packageManager,
       );
       jasmine.attachToDOM(card.element);
+      expect(card.refs.installButton).not.toBeVisible();
+      expect(card.refs.replaceButton).toBeVisible();
+      expect(card.refs.replaceButton.textContent).toBe("Override");
+      expect(card.installNoteTooltip).toBeTruthy();
+    });
+
+    it("blocks Override until the conflicting community card validates", function () {
+      setPackageStatusSpies({ installed: true, disabled: false, hasSettings: false });
+      spyOn(PackageCard.prototype, "getInstalledMetadata").andReturn({
+        name: "search-panel",
+        repository: "https://github.com/lumine-code/lumine.git",
+      });
+      card = new PackageCard(
+        {
+          name: "search-panel",
+          repository: "impostor-dev/search-panel",
+          originKey: "github.com/impostor-dev/search-panel",
+          status: "error",
+          error: "Manifest validation failed.",
+        },
+        new SettingsView(),
+        packageManager,
+      );
+      jasmine.attachToDOM(card.element);
+
       expect(card.refs.installButton).toBeVisible();
       expect(card.refs.installButton).toHaveClass("disabled");
-      expect(card.installNoteTooltip).toBeTruthy();
+      expect(card.refs.replaceButton).not.toBeVisible();
+      expect(card.installNote).toContain("Manifest validation failed");
     });
 
     it("does not open the installed package's settings from a conflicting card", function () {

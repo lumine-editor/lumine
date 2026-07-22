@@ -1,4 +1,9 @@
-const { ownerFromRepository, packageOrigin, packageCoordinate } = require("../lib/utils");
+const {
+  ownerFromRepository,
+  packageOrigin,
+  packageCoordinate,
+  packagePanelKey,
+} = require("../lib/utils");
 
 describe("Utils", () => {
   describe("ownerFromRepository", () => {
@@ -16,11 +21,11 @@ describe("Utils", () => {
   describe("packageOrigin", () => {
     it("uses a catalog entry's installSource/repository", () => {
       expect(packageOrigin({ name: "linter", repository: "author-a/linter" })).toBe(
-        "author-a/linter",
+        "github.com/author-a/linter",
       );
       expect(
         packageOrigin({ name: "linter", installSource: "author-a/linter", repository: "x/y" }),
-      ).toBe("author-a/linter");
+      ).toBe("github.com/author-a/linter");
     });
 
     it("normalizes a Pulsar-style repository URL", () => {
@@ -30,12 +35,12 @@ describe("Utils", () => {
           repository: "https://github.com/asiloisad/pulsar-hydrogen-next",
           installSource: "https://github.com/asiloisad/pulsar-hydrogen-next",
         }),
-      ).toBe("asiloisad/pulsar-hydrogen-next");
+      ).toBe("github.com/asiloisad/pulsar-hydrogen-next");
     });
 
     it("strips a version selector from the origin", () => {
       expect(packageOrigin({ name: "invert-colors", installSource: "owner/repo@0.4.0" })).toBe(
-        "owner/repo",
+        "github.com/owner/repo",
       );
     });
 
@@ -45,7 +50,7 @@ describe("Utils", () => {
         repository: "upstream/thing",
         apmInstallSource: { type: "git", origin: "author/thing", repository: "other/thing" },
       };
-      expect(packageOrigin(metadata)).toBe("author/thing");
+      expect(packageOrigin(metadata)).toBe("github.com/author/thing");
     });
 
     it("prefers apmInstallSource over the package.json repository (forks)", () => {
@@ -60,11 +65,13 @@ describe("Utils", () => {
           repository: "lumine-code/hydrogen-next",
         },
       };
-      expect(packageOrigin(metadata)).toBe("lumine-code/hydrogen-next");
+      expect(packageOrigin(metadata)).toBe("github.com/lumine-code/hydrogen-next");
     });
 
     it("falls back to the repository only when nothing else is known", () => {
-      expect(packageOrigin({ name: "thing", repository: "owner/thing" })).toBe("owner/thing");
+      expect(packageOrigin({ name: "thing", repository: "owner/thing" })).toBe(
+        "github.com/owner/thing",
+      );
       expect(packageOrigin({ name: "thing" })).toBe("");
       expect(packageOrigin(null)).toBe("");
     });
@@ -74,7 +81,7 @@ describe("Utils", () => {
     it("returns the install slot (name) and the unique origin", () => {
       expect(packageCoordinate({ name: "linter", repository: "author-a/linter" })).toEqual({
         name: "linter",
-        origin: "author-a/linter",
+        originKey: "github.com/author-a/linter",
       });
     });
 
@@ -82,7 +89,19 @@ describe("Utils", () => {
       const a = packageCoordinate({ name: "linter", repository: "author-a/linter" });
       const b = packageCoordinate({ name: "linter", repository: "author-b/linter" });
       expect(a.name).toBe(b.name);
-      expect(a.origin).not.toBe(b.origin);
+      expect(a.originKey).not.toBe(b.originKey);
+    });
+  });
+
+  describe("packagePanelKey", () => {
+    it("does not key community or built-in detail panels by name alone", () => {
+      expect(packagePanelKey({ name: "shared", repository: "owner/one" })).toBe(
+        "community:github.com/owner/one",
+      );
+      expect(packagePanelKey({ name: "shared", repository: "owner/two" })).toBe(
+        "community:github.com/owner/two",
+      );
+      expect(packagePanelKey({ name: "shared", packageKind: "builtin" })).toBe("builtin:shared");
     });
   });
 });

@@ -67,6 +67,11 @@ export default class SettingsView {
 
   removePanelCache(name) {
     delete this.panelsByName[name];
+    for (const [key, panel] of Object.entries(this.panelsByName)) {
+      if (panel instanceof PackageDetailView && panel.pack && panel.pack.name === name) {
+        delete this.panelsByName[key];
+      }
+    }
   }
 
   update() {}
@@ -295,7 +300,9 @@ export default class SettingsView {
       previouslyActivePanel.classList.remove("active");
     }
 
-    const newActivePanel = this.refs.sidebar.querySelector(`[name='${name}']`);
+    const newActivePanel = Array.from(this.refs.sidebar.querySelectorAll("[name]")).find(
+      (element) => element.getAttribute("name") === name,
+    );
     if (newActivePanel) {
       newActivePanel.classList.add("active");
     }

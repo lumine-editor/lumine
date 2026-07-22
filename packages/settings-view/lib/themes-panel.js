@@ -11,7 +11,7 @@ import ErrorView from "./error-view";
 
 import List from "./list";
 import ListView from "./list-view";
-import { ownerFromRepository, packageComparatorAscending } from "./utils";
+import { ownerFromRepository, packageComparatorAscending, packagePanelKey } from "./utils";
 
 export default class ThemesPanel extends CollapsibleSectionPanel {
   static loadPackagesDelay() {
@@ -603,9 +603,15 @@ export default class ThemesPanel extends CollapsibleSectionPanel {
     const themeName = this.refs[menuRef].value;
     const pack = atom.packages.getLoadedPackage(themeName);
     if (pack != null) {
-      this.settingsView.showPanel(themeName, {
+      const isBuiltin =
+        typeof atom.packages.getBundledPackageDescriptors === "function" &&
+        atom.packages
+          .getBundledPackageDescriptors()
+          .some((descriptor) => descriptor.name === themeName && descriptor.path === pack.path);
+      const metadata = { ...pack.metadata, packageKind: isBuiltin ? "builtin" : undefined };
+      this.settingsView.showPanel(packagePanelKey(metadata), {
         back: "Themes",
-        pack: pack.metadata,
+        pack: metadata,
       });
     }
   }

@@ -14,6 +14,7 @@ import PackageKeymapView from "./package-keymap-view";
 import PackageReadmeView from "./package-readme-view";
 import PackageSnippetsView from "./package-snippets-view";
 import SettingsPanel from "./settings-panel";
+import { packageOrigin } from "./utils";
 
 const NORMALIZE_PACKAGE_DATA_README_ERROR = "ERROR: No README data found!";
 
@@ -156,6 +157,7 @@ export default class PackageDetailView {
   }
 
   completeInitialization() {
+    this.hideLoadingMessage();
     if (this.refs.packageCard) {
       this.packageCard = this.refs.packageCard.packageCard;
     } else if (!this.packageCard) {
@@ -180,18 +182,36 @@ export default class PackageDetailView {
   }
 
   loadPackage() {
-    const loadedPackage = atom.packages.getLoadedPackage(this.pack.name);
+    const loadedPackage = this.getMatchingLoadedPackage();
     if (loadedPackage) {
       this.pack = loadedPackage;
       this.completeInitialization();
+    } else if (this.pack.metadata) {
+      // A same-named loaded package may be a bundled package or another
+      // community origin. Keep the exact card metadata instead of crossing
+      // package identities, and never query the legacy registry by name.
+      this.completeInitialization();
     } else {
-      // If the package metadata in `@pack` isn't complete, hit the network.
-      if (!this.pack.metadata || !this.pack.metadata.owner) {
-        this.fetchPackage();
-      } else {
-        this.completeInitialization();
-      }
+      this.showErrorMessage();
     }
+  }
+
+  getMatchingLoadedPackage() {
+    const loadedPackage = atom.packages.getLoadedPackage(this.pack.name);
+    if (!loadedPackage) return null;
+
+    const requested = this.pack.metadata || this.pack;
+    const requestedOrigin = packageOrigin(requested);
+    const loadedOrigin = packageOrigin(loadedPackage.metadata);
+    if (requestedOrigin) return requestedOrigin === loadedOrigin ? loadedPackage : null;
+
+    const requestsBuiltin =
+      this.pack.packageKind === "builtin" ||
+      this.pack.isBuiltinDescriptor ||
+      requested.packageKind === "builtin" ||
+      requested.isBuiltinDescriptor;
+    if (requestsBuiltin && loadedOrigin) return null;
+    return loadedPackage;
   }
 
   fetchPackage() {
@@ -218,10 +238,11 @@ export default class PackageDetailView {
   }
 
   hideLoadingMessage() {
-    this.refs.loadingMessage.classList.add("hidden");
+    if (this.refs.loadingMessage) this.refs.loadingMessage.classList.add("hidden");
   }
 
   showErrorMessage() {
+    this.hideLoadingMessage();
     this.refs.errorMessage.classList.remove("hidden");
   }
 
@@ -231,10 +252,7 @@ export default class PackageDetailView {
 
   activateConfig() {
     // Package.activateConfig() is part of the Private package API and should not be used outside of core.
-    if (
-      atom.packages.isPackageLoaded(this.pack.name) &&
-      !atom.packages.isPackageActive(this.pack.name)
-    ) {
+    if (this.getMatchingLoadedPackage() && !atom.packages.isPackageActive(this.pack.name)) {
       this.pack.activateConfig();
     }
   }
@@ -467,7 +485,8 @@ export default class PackageDetailView {
     this.activateConfig();
     this.refs.startupTime.style.display = "none";
 
-    if (atom.packages.isPackageLoaded(this.pack.name)) {
+    const loadedPackage = this.getMatchingLoadedPackage();
+    if (loadedPackage) {
       if (!atom.packages.isPackageDisabled(this.pack.name)) {
         this.settingsPanel = new SettingsPanel({ namespace: this.pack.name, includeTitle: false });
         this.keymapView = new PackageKeymapView(this.pack);
@@ -487,8 +506,11 @@ export default class PackageDetailView {
     }
 
     const sourceIsAvailable =
-      this.packageManager.isPackageInstalled(this.pack.name) &&
-      !atom.packages.isBundledPackage(this.pack.name);
+      loadedPackage &&
+      loadedPackage.path &&
+      ((loadedPackage.metadata.apmInstallSource &&
+        loadedPackage.metadata.apmInstallSource.type === "git") ||
+        !atom.packages.isBundledPackage(this.pack.name));
     if (sourceIsAvailable) {
       this.refs.openButton.style.display = "";
     } else {
@@ -507,6 +529,25 @@ export default class PackageDetailView {
       readme = this.pack.metadata.readme;
     } else {
       readme = null;
+    }
+
+    if (
+      !readme &&
+      !this.readmeRequested &&
+      this.pack.metadata.originKey &&
+      this.pack.metadata.resolvedSha
+    ) {
+      this.readmeRequested = true;
+      this.packageManager
+        .getCatalogClient()
+        .loadReadme(this.pack.metadata)
+        .then((entry) => {
+          if (!entry) return;
+          this.pack.metadata.readme = entry.body;
+          this.pack.metadata.readmeSource = entry.source;
+          this.renderReadme();
+        })
+        .catch(() => {});
     }
 
     if (
@@ -531,7 +572,7 @@ export default class PackageDetailView {
 
       // Check if URL is undefined (i.e. package is unpublished)
       if (repoUrl) {
-        readmeSrc = repoUrl;
+        readmeSrc = this.pack.metadata.readmeSource || repoUrl;
       }
     }
 
@@ -552,7 +593,7 @@ export default class PackageDetailView {
   subscribeToPackageManager() {
     this.disposables.add(
       this.packageManager.on("theme-installed package-installed", ({ pack }) => {
-        if (this.pack.name === pack.name) {
+        if (this.isSamePackage(pack)) {
           this.loadPackage();
           this.updateInstalledState();
         }
@@ -561,7 +602,7 @@ export default class PackageDetailView {
 
     this.disposables.add(
       this.packageManager.on("theme-uninstalled package-uninstalled", ({ pack }) => {
-        if (this.pack.name === pack.name) {
+        if (this.isSamePackage(pack)) {
           return this.updateInstalledState();
         }
       }),
@@ -569,13 +610,20 @@ export default class PackageDetailView {
 
     this.disposables.add(
       this.packageManager.on("theme-updated package-updated", ({ pack }) => {
-        if (this.pack.name === pack.name) {
+        if (this.isSamePackage(pack)) {
           this.loadPackage();
           this.updateFileButtons();
           this.populate();
         }
       }),
     );
+  }
+
+  isSamePackage(pack) {
+    if (!pack || this.pack.name !== pack.name) return false;
+    const currentOrigin = packageOrigin(this.pack.metadata || this.pack);
+    const eventOrigin = packageOrigin(pack.metadata || pack);
+    return !currentOrigin || !eventOrigin || currentOrigin === eventOrigin;
   }
 
   openMarkdownFile(path) {
@@ -591,8 +639,18 @@ export default class PackageDetailView {
     this.licensePath = null;
     this.readmePath = null;
 
+    const matchingLoadedPackage = this.getMatchingLoadedPackage();
     const packagePath =
-      this.pack.path != null ? this.pack.path : atom.packages.resolvePackagePath(this.pack.name);
+      this.pack.path != null
+        ? this.pack.path
+        : matchingLoadedPackage && matchingLoadedPackage.path
+          ? matchingLoadedPackage.path
+          : null;
+    if (!packagePath) {
+      this.refs.changelogButton.style.display = "none";
+      this.refs.licenseButton.style.display = "none";
+      return;
+    }
     for (const child of fs.listSync(packagePath)) {
       switch (path.basename(child, path.extname(child)).toLowerCase()) {
         case "changelog":

@@ -27,16 +27,13 @@ describe("PackageDetailView", function () {
       opts = {};
     }
     packageManager.client = createClientSpy();
-    packageManager.client.package.andCallFake(function (name, cb) {
-      const packageData = require(path.join(__dirname, "fixtures", packageName, "package.json"));
-      packageData.readme = fs.readFileSync(
-        path.join(__dirname, "fixtures", packageName, "README.md"),
-        "utf8",
-      );
-      return cb(null, packageData);
-    });
+    const packageData = require(path.join(__dirname, "fixtures", packageName, "package.json"));
+    packageData.readme = fs.readFileSync(
+      path.join(__dirname, "fixtures", packageName, "README.md"),
+      "utf8",
+    );
     view = new PackageDetailView(
-      { name: packageName },
+      { ...packageData, name: packageName, metadata: packageData },
       new SettingsView(),
       packageManager,
       SnippetsProvider,
@@ -49,12 +46,9 @@ describe("PackageDetailView", function () {
       opts = {};
     }
     packageManager.client = createClientSpy();
-    packageManager.client.package.andCallFake(function (name, cb) {
-      const packageData = require(path.join(__dirname, "fixtures", packageName, "package.json"));
-      return cb(null, packageData);
-    });
+    const packageData = require(path.join(__dirname, "fixtures", packageName, "package.json"));
     view = new PackageDetailView(
-      { name: packageName },
+      { ...packageData, name: packageName, metadata: packageData },
       new SettingsView(),
       packageManager,
       SnippetsProvider,
@@ -139,11 +133,36 @@ describe("PackageDetailView", function () {
     expect(packageManager.client.package.callCount).toBe(0);
   });
 
-  it("shows a loading message and calls out to atom.io when package metadata is missing", function () {
+  it("uses hydrated metadata without calling the legacy API by name", function () {
     loadPackageFromRemote("package-with-readme");
     expect(view.refs.loadingMessage).not.toBe(null);
-    expect(view.refs.loadingMessage.classList.contains("hidden")).not.toBe(true);
-    expect(packageManager.client.package).toHaveBeenCalled();
+    expect(view.refs.loadingMessage.classList.contains("hidden")).toBe(true);
+    expect(packageManager.client.package).not.toHaveBeenCalled();
+  });
+
+  it("does not expose a loaded package through a same-named card from another origin", function () {
+    const packagePath = path.join(__dirname, "fixtures", "package-with-config");
+    atom.packages.loadPackage(packagePath);
+    const metadata = {
+      name: "package-with-config",
+      version: "1.0.0",
+      repository: "https://github.com/different/package-with-config",
+      originKey: "github.com/different/package-with-config",
+      resolvedSha: "a".repeat(40),
+      engines: { atom: "*" },
+    };
+
+    view = new PackageDetailView(
+      { ...metadata, metadata },
+      new SettingsView(),
+      packageManager,
+      SnippetsProvider,
+    );
+
+    expect(view.pack.metadata.repository).toBe(metadata.repository);
+    expect(view.readmePath).toBeNull();
+    expect(view.refs.openButton.style.display).toBe("none");
+    expect(view.refs.sections.querySelector(".settings-panel")).toBeNull();
   });
 
   it("shows an error when package metadata cannot be loaded via the API", function () {
@@ -181,7 +200,7 @@ describe("PackageDetailView", function () {
       SnippetsProvider,
     );
 
-    expect(AtomIoClient.prototype.fetchFromCache).toHaveBeenCalled();
+    expect(AtomIoClient.prototype.fetchFromCache).not.toHaveBeenCalled();
 
     expect(view.refs.errorMessage.classList.contains("hidden")).not.toBe(true);
     expect(view.refs.loadingMessage.classList.contains("hidden")).toBe(true);
@@ -202,12 +221,13 @@ describe("PackageDetailView", function () {
     expect(
       view.element.querySelectorAll('.package-readme input[type="checkbox"][disabled]').length,
     ).toBe(2);
-    expect(view.element.querySelector('img[alt="AbsoluteImage"]').getAttribute("src")).toBe(
-      "https://example.com/static/image.jpg",
-    );
-    expect(view.element.querySelector('img[alt="RelativeImage"]').getAttribute("src")).toBe(
-      "https://github.com/example/package-with-readme/raw/HEAD/static/image.jpg",
-    );
+    expect(
+      view.element.querySelector('img[alt="AbsoluteImage"]').getAttribute("data-external-src"),
+    ).toBe("https://example.com/static/image.jpg");
+    expect(view.element.querySelector('img[alt="AbsoluteImage"]').getAttribute("src")).toBeNull();
+    expect(
+      view.element.querySelector('img[alt="RelativeImage"]').getAttribute("data-external-src"),
+    ).toBe("https://github.com/example/package-with-readme/raw/HEAD/static/image.jpg");
     expect(view.element.querySelector('img[alt="Base64Image"]').getAttribute("src")).toBe(
       "data:image/gif;base64,R0lGODlhAQABAIAAAP///wAAACH5BAEAAAAALAAAAAABAAEAAAICRAEAOw==",
     );

@@ -65,11 +65,14 @@ module.exports = class PackageManager {
     this.devMode = params.devMode;
     this.resourcePath = params.resourcePath;
     if (params.configDirPath != null && !params.safeMode) {
+      this.userPackagesPath = path.join(params.configDirPath, "packages");
       if (this.devMode) {
         this.packageDirPaths.push(path.join(params.configDirPath, "dev", "packages"));
-        this.packageDirPaths.push(path.join(this.resourcePath, "packages"));
       }
-      this.packageDirPaths.push(path.join(params.configDirPath, "packages"));
+      // User packages are ahead of bundled source-checkout packages so manual
+      // installs shadow built-ins consistently in development and production.
+      this.packageDirPaths.push(this.userPackagesPath);
+      if (this.devMode) this.packageDirPaths.push(path.join(this.resourcePath, "packages"));
     }
   }
 
@@ -402,6 +405,38 @@ module.exports = class PackageManager {
     return packages.sort((a, b) => a.name.localeCompare(b.name));
   }
 
+  getBundledPackageDescriptors() {
+    const descriptors = [];
+    for (const packageName of Object.keys(this.packageDependencies)) {
+      const candidates = [
+        path.join(this.resourcePath, "packages", packageName),
+        path.join(this.resourcePath, "node_modules", packageName),
+      ];
+      const packagePath = candidates.find((candidate) => fs.isDirectorySync(candidate));
+      if (!packagePath) continue;
+      const metadata = this.loadPackageMetadata(packagePath, true) || { name: packageName };
+      descriptors.push({
+        name: packageName,
+        path: packagePath,
+        metadata,
+        packageKind: "builtin",
+        isBuiltinDescriptor: true,
+      });
+      for (const theme of Array.isArray(metadata.themes) ? metadata.themes : []) {
+        if (!theme || typeof theme.name !== "string" || !theme.theme) continue;
+        descriptors.push({
+          name: theme.name,
+          path: packagePath,
+          metadata: { ...metadata, ...theme, name: theme.name },
+          packageKind: "builtin",
+          isBuiltinDescriptor: true,
+          virtualTheme: true,
+        });
+      }
+    }
+    return descriptors;
+  }
+
   /*
   Section: Private
   */
@@ -664,7 +699,11 @@ module.exports = class PackageManager {
         continue;
       }
 
-      if (this.getLoadedPackage(entry.name) != null) {
+      const userThemePath = this.userPackagesPath && path.join(this.userPackagesPath, entry.name);
+      if (
+        this.getLoadedPackage(entry.name) != null ||
+        (userThemePath && fs.isDirectorySync(userThemePath))
+      ) {
         continue;
       }
 

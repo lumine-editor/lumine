@@ -10,11 +10,11 @@
 // can be updated later.
 
 const fs = require("fs");
-const os = require("os");
 const path = require("path");
 const { spawnSync } = require("child_process");
 const CSON = require("@lumine-code/season");
 const { resolvePackageSource } = require("./package-source");
+const PackageInstallationService = require("./package-installation-service");
 
 function packagesDirectory() {
   return path.join(process.env.LUMINE_HOME, "packages");
@@ -72,67 +72,30 @@ function readMetadata(packagePath) {
   return { path: metadataPath, metadata: CSON.readFileSync(metadataPath) };
 }
 
-function writeMetadata(metadataPath, metadata) {
-  if (path.extname(metadataPath) === ".json") {
-    fs.writeFileSync(metadataPath, `${JSON.stringify(metadata, null, 2)}\n`);
-  } else {
-    CSON.writeFileSync(metadataPath, metadata);
-  }
-}
-
 async function install(source) {
   if (!source) {
     throw new Error("Specify a package to install, e.g. `lumine --install owner/repo`.");
   }
-
-  const resolvedSource = await resolvePackageSource(source, async (cloneUrl, options, patterns) =>
-    capture(gitCommand(), ["ls-remote", ...options, cloneUrl, ...patterns]),
-  );
-  const cloneDir = fs.mkdtempSync(path.join(os.tmpdir(), "lumine-package-"));
-
-  try {
-    console.log(`Installing ${source}…`);
-    run(gitCommand(), ["init"], { cwd: cloneDir });
-    run(gitCommand(), ["remote", "add", "origin", resolvedSource.cloneUrl], { cwd: cloneDir });
-    run(gitCommand(), ["fetch", "--depth", "1", "origin", resolvedSource.fetchRef], {
-      cwd: cloneDir,
-    });
-    run(gitCommand(), ["checkout", "--detach", "FETCH_HEAD"], { cwd: cloneDir });
-    const sha = capture(gitCommand(), ["rev-parse", "HEAD"], { cwd: cloneDir }).trim();
-    if (resolvedSource.sha && sha !== resolvedSource.sha) {
-      throw new Error(`Repository ref changed while installing ${source}; please try again.`);
-    }
-    run(npmCommand(), ["install", "--omit=dev"], { cwd: cloneDir });
-
-    const read = readMetadata(cloneDir);
-    if (!read) {
-      throw new Error(
-        "The repository does not contain a package.json, package.jsonc, or package.cson file.",
-      );
-    }
-
-    const { path: metadataPath, metadata } = read;
-    metadata.apmInstallSource = {
-      type: "git",
-      source: resolvedSource.source,
-      repository: resolvedSource.repository,
-      selector: resolvedSource.selector,
-      updatePolicy: resolvedSource.updatePolicy,
-      sha,
-    };
-    writeMetadata(metadataPath, metadata);
-
-    const name = metadata.name || path.basename(resolvedSource.repository);
-    const targetDir = path.join(packagesDirectory(), name);
-    fs.rmSync(targetDir, { recursive: true, force: true });
-    fs.mkdirSync(packagesDirectory(), { recursive: true });
-    fs.cpSync(cloneDir, targetDir, { recursive: true });
-    fs.rmSync(path.join(targetDir, ".git"), { recursive: true, force: true });
-
-    console.log(`Installed ${name} to ${targetDir}`);
-  } finally {
-    fs.rmSync(cloneDir, { recursive: true, force: true });
-  }
+  console.log(`Installing ${source}…`);
+  const service = new PackageInstallationService({
+    packagesDirectory: packagesDirectory(),
+    gitCommand: gitCommand(),
+    npmCommand: npmCommand(),
+    run: async (command, args, options) => {
+      run(command, args, options);
+      return { stdout: "" };
+    },
+    capture: async (command, args, options) => ({
+      stdout: capture(command, args, options),
+    }),
+    resolveSource: (value) =>
+      resolvePackageSource(value, async (cloneUrl, options, patterns) =>
+        capture(gitCommand(), ["ls-remote", ...options, cloneUrl, ...patterns]),
+      ),
+    atomVersion: require("../package.json").version.split("-")[0],
+  });
+  const installed = await service.install({ installSource: source, name: source });
+  console.log(`Installed ${installed.packageName} to ${installed.target}`);
 }
 
 function uninstall(name) {

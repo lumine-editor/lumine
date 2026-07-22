@@ -18,14 +18,28 @@ describe("InstallPanel", function () {
       load: jasmine
         .createSpy("load")
         .andReturn(Promise.resolve({ schemaVersion: 1, packages: [] })),
+      loadAll: jasmine.createSpy("loadAll").andReturn(
+        Promise.resolve({
+          schemaVersion: 2,
+          packages: [],
+          lastFetch: Date.now(),
+          errors: [],
+        }),
+      ),
+      cancel: jasmine.createSpy("cancel"),
+      hydrateSource: jasmine.createSpy("hydrateSource").andCallFake((source) =>
+        Promise.resolve({
+          name: source.split("/").pop(),
+          repository: source,
+          catalogSources: ["pulsar"],
+        }),
+      ),
     };
     pulsarClient = {
       search: jasmine.createSpy("search").andReturn(Promise.resolve([])),
       getPackage: jasmine.createSpy("getPackage").andReturn(Promise.resolve(null)),
     };
-    spyOn(packageManager, "getCatalogClient").andReturn({
-      load: catalogClient.load,
-    });
+    spyOn(packageManager, "getCatalogClient").andReturn(catalogClient);
     spyOn(packageManager, "getPulsarClient").andReturn(pulsarClient);
     panel = new InstallPanel(settingsView, packageManager);
   });
@@ -107,7 +121,7 @@ describe("InstallPanel", function () {
   });
 
   it("shows catalog fetch failures in the catalog sources zone", function () {
-    catalogClient.load.andReturn(Promise.reject(new Error("boom")));
+    catalogClient.loadAll.andReturn(Promise.reject(new Error("boom")));
     panel.refs.fetchButton.click();
 
     waitsForPromise(() =>
@@ -126,86 +140,82 @@ describe("InstallPanel", function () {
   });
 
   it("does not load any catalogs just from constructing the panel", function () {
-    expect(catalogClient.load).not.toHaveBeenCalled();
+    expect(catalogClient.loadAll).not.toHaveBeenCalled();
     expect(panel.catalogFetched).toBe(false);
   });
 
   it("fetches the catalogs the first time the tab is shown", function () {
-    catalogClient.load.reset();
+    catalogClient.loadAll.reset();
     panel.beforeShow();
-
-    expect(panel.catalogFetched).toBe(true);
-    expect(catalogClient.load).toHaveBeenCalledWith("official/catalog", {
-      refresh: false,
-      cacheOnly: false,
-    });
+    waitsForPromise(() =>
+      panel.catalogPromise.then(() => {
+        expect(panel.catalogFetched).toBe(true);
+        expect(catalogClient.loadAll.callCount).toBe(2);
+        expect(catalogClient.loadAll.argsForCall[0][1].cacheOnly).toBe(true);
+        expect(catalogClient.loadAll.mostRecentCall.args[1].refresh).toBe(true);
+      }),
+    );
   });
 
   it("does not re-fetch on later shows", function () {
     panel.beforeShow();
-    expect(panel.catalogFetched).toBe(true);
-    catalogClient.load.reset();
-
-    panel.beforeShow();
-    expect(catalogClient.load).not.toHaveBeenCalled();
+    waitsForPromise(() =>
+      panel.catalogPromise.then(() => {
+        expect(panel.catalogFetched).toBe(true);
+        catalogClient.loadAll.reset();
+        panel.beforeShow();
+        expect(catalogClient.loadAll).not.toHaveBeenCalled();
+      }),
+    );
   });
 
   it("downloads the catalogs without the cache when fetch is clicked", function () {
-    catalogClient.load.reset();
+    catalogClient.loadAll.reset();
     panel.refs.fetchButton.click();
-
-    expect(catalogClient.load).toHaveBeenCalledWith("official/catalog", {
-      refresh: true,
-      cacheOnly: false,
-    });
+    expect(catalogClient.loadAll.mostRecentCall.args[0]).toEqual(["official/catalog"]);
+    expect(catalogClient.loadAll.mostRecentCall.args[1].refresh).toBe(true);
   });
 
   it("auto-downloads the catalogs on the first search if never fetched", function () {
     expect(panel.catalogFetched).toBe(false);
-    catalogClient.load.reset();
+    catalogClient.loadAll.reset();
 
     panel.refs.searchEditor.setText("something");
     panel.performSearch();
 
     expect(panel.catalogFetched).toBe(true);
-    expect(catalogClient.load).toHaveBeenCalledWith("official/catalog", {
-      refresh: false,
-      cacheOnly: false,
-    });
+    expect(catalogClient.loadAll).toHaveBeenCalled();
   });
 
   it("does not auto-download again once the catalogs have been fetched", function () {
     panel.refs.fetchButton.click();
     expect(panel.catalogFetched).toBe(true);
-    catalogClient.load.reset();
+    catalogClient.loadAll.reset();
 
     panel.refs.searchEditor.setText("something");
     panel.performSearch();
 
-    expect(catalogClient.load).not.toHaveBeenCalled();
+    expect(catalogClient.loadAll).not.toHaveBeenCalled();
   });
 
   it("aggregates catalogs in order and dedupes packages by repository", function () {
-    catalogClient.load.andCallFake((source) =>
+    catalogClient.loadAll.andReturn(
       Promise.resolve({
-        schemaVersion: 1,
+        schemaVersion: 2,
         packages: [
           {
             name: "shared",
-            description: source,
+            description: "first/catalog",
             repository: "owner/shared",
             installSource: "owner/shared",
           },
-          ...(source === "second/catalog"
-            ? [
-                {
-                  name: "second-only",
-                  repository: "owner/second-only",
-                  installSource: "owner/second-only",
-                },
-              ]
-            : []),
+          {
+            name: "second-only",
+            repository: "owner/second-only",
+            installSource: "owner/second-only",
+          },
         ],
+        errors: [],
       }),
     );
     atom.config.set("settings-view.communityPackageCatalogs", ["first/catalog", "second/catalog"]);
@@ -221,13 +231,14 @@ describe("InstallPanel", function () {
   });
 
   it("keeps same-named packages from different repositories", function () {
-    catalogClient.load.andReturn(
+    catalogClient.loadAll.andReturn(
       Promise.resolve({
-        schemaVersion: 1,
+        schemaVersion: 2,
         packages: [
           { name: "twin", repository: "author-one/twin", installSource: "author-one/twin" },
           { name: "twin", repository: "author-two/twin", installSource: "author-two/twin" },
         ],
+        errors: [],
       }),
     );
     panel.refs.fetchButton.click();
@@ -240,6 +251,42 @@ describe("InstallPanel", function () {
         ]);
       }),
     );
+  });
+
+  it("searches all hydrated records but renders at most 50 cards per page", function () {
+    panel.catalogPackages = Array.from({ length: 1000 }, (_value, index) => ({
+      name: `package-${String(index).padStart(4, "0")}`,
+      repository: `owner/package-${index}`,
+      installSource: `owner/package-${index}`,
+      engines: { atom: "*" },
+    }));
+    panel.renderBrowseList();
+
+    expect(panel.browsePackageCards.length).toBe(50);
+    expect(panel.refs.browseContainer.querySelectorAll(".package-card").length).toBe(50);
+    expect(panel.refs.pageStatus.textContent).toContain("1000 result(s)");
+
+    panel.nextPage();
+    expect(panel.page).toBe(2);
+    expect(panel.browsePackageCards.length).toBe(50);
+  });
+
+  it("marks progressively available search results as incomplete while indexing", function () {
+    panel.catalogPackages = [
+      {
+        name: "sample-package",
+        repository: "owner/sample-package",
+        originKey: "github.com/owner/sample-package",
+        status: "ready",
+      },
+    ];
+    panel.catalogIndexing = true;
+
+    panel.renderIncompleteSearch("sample");
+
+    expect(panel.searchPackages.map(({ name }) => name)).toEqual(["sample-package"]);
+    expect(panel.refs.resultsContainer.querySelectorAll(".package-card").length).toBe(1);
+    expect(panel.refs.searchMessage.textContent).toContain("incomplete");
   });
 
   describe("Pulsar registry results", function () {
@@ -273,7 +320,7 @@ describe("InstallPanel", function () {
         panel.search("shared").then((results) => {
           expect(pulsarClient.search).toHaveBeenCalledWith("shared");
           expect(results.map(({ name }) => name)).toEqual(["shared", "pulsar-only"]);
-          expect(results[1].source).toBe("pulsar");
+          expect(results[1].catalogSources).toEqual(["pulsar"]);
           expect(panel.refs.resultsContainer.querySelectorAll(".package-card").length).toBe(2);
         }),
       );
@@ -419,6 +466,7 @@ describe("InstallPanel", function () {
         core: [],
         git: [{ name: "pulsar-only" }],
       });
+      spyOn(packageManager, "getGitPackageUpdates").andReturn(Promise.resolve([]));
     });
 
     it("triggers an update check when shown via the check-updates URI", function () {
@@ -428,51 +476,42 @@ describe("InstallPanel", function () {
     });
 
     it("refreshes the catalogs and shows the Updates filter", function () {
-      catalogClient.load.andReturn(
+      catalogClient.loadAll.andReturn(
         Promise.resolve({
-          schemaVersion: 1,
+          schemaVersion: 2,
           packages: [{ name: "updatable", version: "2.0.0", repository: "owner/updatable" }],
+          errors: [],
         }),
       );
 
       waitsForPromise(() => panel.checkForUpdates());
       runs(() => {
-        expect(catalogClient.load).toHaveBeenCalledWith("official/catalog", {
-          refresh: true,
-          cacheOnly: false,
-        });
+        expect(catalogClient.loadAll.mostRecentCall.args[1].refresh).toBe(true);
         expect(panel.refs.filterUpdatesButton).toHaveClass("selected");
         expect(panel.browsePackageCards.map(({ pack }) => pack.name)).toEqual(["updatable"]);
       });
     });
 
-    it("merges Pulsar registry updates into the Updates list", function () {
-      catalogClient.load.andReturn(Promise.resolve({ schemaVersion: 1, packages: [] }));
-      pulsarClient.getPackage.andCallFake((name) =>
-        Promise.resolve({
-          name,
-          version: "3.0.0",
-          repository: `https://github.com/owner/${name}`,
-          source: "pulsar",
-        }),
+    it("uses installation receipts for updates without Pulsar metadata", function () {
+      catalogClient.loadAll.andReturn(
+        Promise.resolve({ schemaVersion: 2, packages: [], errors: [] }),
+      );
+      packageManager.getGitPackageUpdates.andReturn(
+        Promise.resolve([
+          { name: "pulsar-only", repository: "owner/pulsar-only", latestSha: "a".repeat(40) },
+        ]),
       );
 
       waitsForPromise(() => panel.checkForUpdates());
       runs(() => {
-        expect(pulsarClient.getPackage).toHaveBeenCalledWith("pulsar-only");
+        expect(pulsarClient.getPackage).not.toHaveBeenCalled();
         expect(panel.browsePackageCards.map(({ pack }) => pack.name)).toEqual(["pulsar-only"]);
       });
     });
 
-    it("ignores Pulsar packages without a newer version", function () {
-      catalogClient.load.andReturn(Promise.resolve({ schemaVersion: 1, packages: [] }));
-      pulsarClient.getPackage.andCallFake((name) =>
-        Promise.resolve({
-          name,
-          version: "1.0.0",
-          repository: `https://github.com/owner/${name}`,
-          source: "pulsar",
-        }),
+    it("ignores installed packages without a receipt update", function () {
+      catalogClient.loadAll.andReturn(
+        Promise.resolve({ schemaVersion: 2, packages: [], errors: [] }),
       );
 
       waitsForPromise(() => panel.checkForUpdates());
@@ -484,7 +523,9 @@ describe("InstallPanel", function () {
 
     it("does not query Pulsar for updates when the toggle is off", function () {
       atom.config.set("settings-view.includePulsarPackageResults", false);
-      catalogClient.load.andReturn(Promise.resolve({ schemaVersion: 1, packages: [] }));
+      catalogClient.loadAll.andReturn(
+        Promise.resolve({ schemaVersion: 2, packages: [], errors: [] }),
+      );
 
       waitsForPromise(() => panel.checkForUpdates());
       runs(() => {

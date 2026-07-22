@@ -13,19 +13,19 @@
     "communityPackageCatalogs": {
       "order": 1,
       "title": "Community Package Catalogs",
-      "description": "Ordered catalog repositories or index URLs aggregated by the Install panel. Earlier sources take precedence when package names overlap.",
+      "description": "Ordered repositories or sources.json URLs containing untrusted lists of Git repositories. Package metadata is fetched directly by Lumine.",
       "type": "array",
       "items": {
         "type": "string"
       },
       "default": [
-        "https://raw.githubusercontent.com/lumine-code/packages/main/index.json"
+        "https://raw.githubusercontent.com/lumine-code/packages/main/sources.json"
       ]
     },
     "includePulsarPackageResults": {
       "order": 2,
       "title": "Include results from the Pulsar package registry",
-      "description": "When searching community packages, also live-search the Pulsar package registry (api.pulsar-edit.dev). Results are fetched per search, never downloaded in bulk.",
+      "description": "When searching community packages, also use repository links returned by the Pulsar registry. Registry metadata is ignored and fetched again from each repository.",
       "type": "boolean",
       "default": false
     },

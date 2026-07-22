@@ -41,6 +41,18 @@ export default class PackageReadmeView {
       this.packageReadme.innerHTML = "<h3>Error parsing README</h3>";
     }
 
+    if (!readmeIsLocal) {
+      for (const image of this.packageReadme.querySelectorAll("img")) {
+        const source = image.getAttribute("src") || "";
+        if (/^https?:\/\//i.test(source)) {
+          image.setAttribute("data-external-src", source);
+          image.removeAttribute("src");
+          image.classList.add("external-image-blocked");
+          image.title = "External image blocked";
+        }
+      }
+    }
+
     // Lumine's global link handler prevents native fragment navigation.
     this.handleAnchorClick = (event) => {
       const anchor = event.target.closest('a[href^="#"]');

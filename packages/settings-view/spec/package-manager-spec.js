@@ -79,7 +79,8 @@ describe("PackageManager", function () {
 
       const packages = packageManager.getLocalPackages();
       expect(packages.dev.map((p) => p.name)).toEqual(["tree-view"]);
-      expect(packages.core).toEqual([]);
+      expect(packages.core.map((p) => p.name)).toEqual(["tree-view"]);
+      expect(packages.core[0].isShadowed).toBe(true);
     });
 
     it("files a git-sourced package under git", function () {
@@ -93,6 +94,22 @@ describe("PackageManager", function () {
 
       const packages = packageManager.getLocalPackages();
       expect(packages.git.map((p) => p.name)).toEqual(["git-package"]);
+    });
+
+    it("keeps a legacy Git install active but warns when its receipt has no origin", function () {
+      availablePackages({
+        name: "legacy-package",
+        path: path.join(configDirPath, "packages", "legacy-package"),
+        metadata: {
+          name: "legacy-package",
+          repository: "owner/legacy-package",
+          apmInstallSource: { type: "git", source: "owner/legacy-package", sha: "abc123" },
+        },
+      });
+      spyOn(atom.packages, "isBundledPackage").andReturn(false);
+
+      const packages = packageManager.getLocalPackages();
+      expect(packages.git[0].originWarning).toContain("missing or mismatched");
     });
 
     it("records directoryName for community but not bundled packages", function () {
@@ -113,6 +130,36 @@ describe("PackageManager", function () {
       const packages = packageManager.getLocalPackages();
       expect(packages.core[0].directoryName).toBeUndefined();
       expect(packages.user[0].directoryName).toBe("installed-as-other");
+    });
+
+    it("keeps both cards when a community package shadows a virtual built-in theme", function () {
+      availablePackages({
+        name: "one-day-ui",
+        path: path.join(configDirPath, "packages", "one-day-ui"),
+        isBundled: false,
+        metadata: {
+          name: "one-day-ui",
+          theme: "ui",
+          repository: "owner/one-day-ui",
+          apmInstallSource: { type: "git", origin: "github.com/owner/one-day-ui" },
+        },
+      });
+      spyOn(atom.packages, "isBundledPackage").andReturn(false);
+      spyOn(atom.packages, "getBundledPackageDescriptors").andReturn([
+        {
+          name: "one-day-ui",
+          path: path.join(path.sep, "app", "packages", "one-theme"),
+          metadata: { name: "one-day-ui", theme: "ui" },
+          packageKind: "builtin",
+          isBuiltinDescriptor: true,
+          virtualTheme: true,
+        },
+      ]);
+
+      const packages = packageManager.getLocalPackages();
+      expect(packages.git.map((pack) => pack.name)).toEqual(["one-day-ui"]);
+      expect(packages.core.map((pack) => pack.name)).toEqual(["one-day-ui"]);
+      expect(packages.core[0].isShadowed).toBe(true);
     });
   });
 
@@ -219,7 +266,15 @@ describe("PackageManager", function () {
       packageManager.update(
         {
           name: "foo",
-          apmInstallSource: { type: "git", source: "user/foo", sha: "abc123" },
+          latestSha: "d".repeat(40),
+          resolvedRef: { type: "branch", value: "main" },
+          apmInstallSource: {
+            type: "git",
+            source: "user/foo#branch:main",
+            selector: { type: "branch", value: "main" },
+            updatePolicy: "branch",
+            sha: "abc123",
+          },
         },
         null,
         updateCallback,
@@ -230,75 +285,21 @@ describe("PackageManager", function () {
       runs(function () {
         expect(updateCallback.argsForCall[0].length).toBe(0);
         expect(packageManager.installGitHubPackage).toHaveBeenCalledWith({
-          name: "user/foo",
-          apmInstallSource: { type: "git", source: "user/foo", sha: "abc123" },
+          name: "user/foo#branch:main",
+          latestSha: "d".repeat(40),
+          resolvedSha: "d".repeat(40),
+          resolvedRef: { type: "branch", value: "main" },
+          selectedRef: { type: "branch", value: "main" },
+          updatePolicy: "branch",
+          apmInstallSource: {
+            type: "git",
+            source: "user/foo#branch:main",
+            selector: { type: "branch", value: "main" },
+            updatePolicy: "branch",
+            sha: "abc123",
+          },
         });
       });
-    });
-  });
-
-  describe("::assertNoNameCollision()", function () {
-    let packagesDir;
-
-    const writeInstalledMetadata = (name, metadata) => {
-      const packageDir = path.join(packagesDir, name);
-      fs.makeTreeSync(packageDir);
-      fs.writeFileSync(
-        path.join(packageDir, "package.json"),
-        JSON.stringify({ name, ...metadata }),
-      );
-    };
-
-    beforeEach(function () {
-      packagesDir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lumine-spec-")));
-      spyOn(packageManager, "getAtomPackagesDirectory").andReturn(packagesDir);
-    });
-
-    afterEach(function () {
-      fs.removeSync(packagesDir);
-    });
-
-    it("throws for names of bundled packages", function () {
-      expect(() =>
-        packageManager.assertNoNameCollision("settings-view", { repository: "user/settings-view" }),
-      ).toThrow();
-    });
-
-    it("throws when a package with the same name but another origin is installed", function () {
-      writeInstalledMetadata("shared-name", {
-        repository: "https://github.com/someone-else/shared-name.git",
-      });
-      expect(() =>
-        packageManager.assertNoNameCollision("shared-name", {
-          repository: "user/shared-name",
-          source: "user/shared-name",
-        }),
-      ).toThrow();
-    });
-
-    it("allows reinstalling the same package", function () {
-      writeInstalledMetadata("shared-name", {
-        repository: "https://github.com/user/shared-name.git",
-      });
-      expect(() =>
-        packageManager.assertNoNameCollision("shared-name", {
-          repository: "user/shared-name",
-          source: "user/shared-name@1.2.0",
-        }),
-      ).not.toThrow();
-    });
-
-    it("allows installing when nothing with that name is installed", function () {
-      expect(() =>
-        packageManager.assertNoNameCollision("free-name", { repository: "user/free-name" }),
-      ).not.toThrow();
-    });
-
-    it("allows overwriting an installed package without origin information", function () {
-      writeInstalledMetadata("shared-name", {});
-      expect(() =>
-        packageManager.assertNoNameCollision("shared-name", { repository: "user/shared-name" }),
-      ).not.toThrow();
     });
   });
 
@@ -344,6 +345,29 @@ describe("PackageManager", function () {
       });
     });
 
+    it("reveals a bundled package and preserves the disabled slot after removing an override", function () {
+      const packagesDir = fs.realpathSync(
+        fs.mkdtempSync(path.join(os.tmpdir(), "lumine-override-uninstall-")),
+      );
+      fs.makeTreeSync(path.join(packagesDir, "search-panel"));
+      atom.config.set("core.disabledPackages", ["search-panel"]);
+      spyOn(packageManager, "getAtomPackagesDirectory").andReturn(packagesDir);
+      spyOn(atom.packages, "isBundledPackage").andReturn(true);
+      spyOn(atom.packages, "isPackageActive").andReturn(false);
+      spyOn(atom.packages, "isPackageLoaded").andReturn(false);
+      spyOn(atom.packages, "isPackageDisabled").andReturn(true);
+      spyOn(atom.packages, "loadPackage");
+      spyOn(atom.packages, "activatePackage");
+
+      waitsForPromise(() => packageManager.uninstall({ name: "search-panel" }));
+      runs(() => {
+        expect(atom.packages.loadPackage).toHaveBeenCalledWith("search-panel");
+        expect(atom.packages.activatePackage).not.toHaveBeenCalled();
+        expect(atom.config.get("core.disabledPackages")).toContain("search-panel");
+        fs.removeSync(packagesDir);
+      });
+    });
+
     it("removes only a user package symlink and preserves its source directory", function () {
       const root = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lumine-uninstall-")));
       const packagesDir = path.join(root, "packages");
@@ -377,20 +401,6 @@ describe("PackageManager", function () {
     });
   });
 
-  describe("::pinSourceToVersion()", function () {
-    it("pins an owner/repo shorthand with @version", function () {
-      expect(packageManager.pinSourceToVersion({ repository: "owner/repo" }, "4.0.0")).toBe(
-        "owner/repo@4.0.0",
-      );
-    });
-
-    it("pins a Git URL with an explicit #tag: selector", function () {
-      expect(
-        packageManager.pinSourceToVersion({ repository: "https://github.com/owner/repo" }, "4.0.0"),
-      ).toBe("https://github.com/owner/repo#tag:4.0.0");
-    });
-  });
-
   describe("::removePackageDir()", function () {
     it("removes a directory tree asynchronously, including nested folders", function () {
       const dir = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lumine-rm-")));
@@ -406,23 +416,6 @@ describe("PackageManager", function () {
       waitsForPromise(() =>
         packageManager.removePackageDir(path.join(os.tmpdir(), "lumine-not-there-xyz")),
       );
-    });
-  });
-
-  describe("::copyPackageDir()", function () {
-    it("copies a directory tree asynchronously", function () {
-      const source = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lumine-src-")));
-      const parent = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), "lumine-dst-")));
-      const target = path.join(parent, "copied");
-      fs.makeTreeSync(path.join(source, "lib"));
-      fs.writeFileSync(path.join(source, "lib", "main.js"), "module.exports = 1;");
-
-      waitsForPromise(() => packageManager.copyPackageDir(source, target));
-      runs(() => {
-        expect(fs.existsSync(path.join(target, "lib", "main.js"))).toBe(true);
-        fs.removeSync(source);
-        fs.removeSync(parent);
-      });
     });
   });
 
@@ -565,6 +558,7 @@ describe("PackageManager", function () {
         Promise.resolve({
           sha: "2222222222222222222222222222222222222222",
           version: "2.0.0",
+          selector: { type: "latest", value: "v2.0.0" },
         }),
       );
 
@@ -573,6 +567,7 @@ describe("PackageManager", function () {
           expect(updates.length).toBe(1);
           expect(updates[0].latestSha).toBe("2222222222222222222222222222222222222222");
           expect(updates[0].latestVersion).toBe("2.0.0");
+          expect(updates[0].resolvedRef).toEqual({ type: "latest", value: "v2.0.0" });
         }),
       );
     });
@@ -597,6 +592,36 @@ describe("PackageManager", function () {
         packageManager.getGitPackageUpdates().then((updates) => {
           expect(updates).toEqual([]);
           expect(packageManager.resolvePackageSource).not.toHaveBeenCalled();
+        }),
+      );
+    });
+
+    it("reports a moved pinned tag as suspicious without offering a new SHA", function () {
+      spyOn(packageManager, "getLocalPackages").andReturn({
+        git: [
+          {
+            name: "sample",
+            apmInstallSource: {
+              type: "git",
+              source: "owner/sample#tag:v1.0.0",
+              selector: { type: "tag", value: "v1.0.0" },
+              updatePolicy: "pinned",
+              sha: "1111111111111111111111111111111111111111",
+            },
+          },
+        ],
+      });
+      spyOn(packageManager, "resolvePackageSource").andReturn(
+        Promise.resolve({ sha: "2222222222222222222222222222222222222222" }),
+      );
+
+      waitsForPromise(() =>
+        packageManager.getGitPackageUpdates().then((updates) => {
+          expect(updates.length).toBe(1);
+          expect(updates[0].suspiciousTagMove.remoteSha).toBe(
+            "2222222222222222222222222222222222222222",
+          );
+          expect(updates[0].latestSha).toBeUndefined();
         }),
       );
     });

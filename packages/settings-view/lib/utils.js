@@ -1,5 +1,7 @@
-const fs = require("fs");
 const path = require("path");
+const CSON = require("@lumine-code/season");
+// eslint-disable-next-line n/no-unpublished-require
+const { normalizeRepositoryOrigin, repositoryReference } = require("../../../src/package-source");
 
 const ownerFromRepository = (repository) => {
   if (!repository) return "";
@@ -42,33 +44,10 @@ const repoUrlFromRepository = (repository) => {
   return repo;
 };
 
-// Reduces any supported repository notation (owner/repo shorthand with
-// optional @tag/#commit/~branch pin, https/ssh/git URLs, package.json
-// repository objects) to a bare "owner/repo" reference.
-const normalizeRepository = (repository, { lowercase = false } = {}) => {
-  let repo = "";
-  if (typeof repository === "string") {
-    repo = repository;
-  } else if (repository && typeof repository.url === "string") {
-    repo = repository.url;
-  }
-  repo = repo.trim();
-  if (lowercase) repo = repo.toLowerCase();
-  repo = repo
-    .replace(/^git\+/i, "")
-    .replace(/\.git$/i, "")
-    .replace(/^git@github\.com:/i, "")
-    .replace(/^(?:https?|ssh|git):\/\/(?:[^@/]+@)?(?:www\.)?github\.com\//i, "")
-    .replace(/\/+$/, "");
-  const match = repo.match(/^([\w.-]+\/[\w.-]+?)([@#~].*)?$/);
-  return match ? match[1] : repo;
-};
-
-// A comparable identity for a package: the lowercased "owner/repo" origin.
-const packageOriginKey = (repository) => normalizeRepository(repository, { lowercase: true });
-
-// A human-facing "owner/repo" reference for display, preserving case.
-const repoReferenceFromRepository = (repository) => normalizeRepository(repository);
+// The comparable identity includes the host. GitHub shorthand is displayed as
+// owner/repo, while generic hosts remain explicit.
+const packageOriginKey = (repository) => normalizeRepositoryOrigin(repository);
+const repoReferenceFromRepository = (repository) => repositoryReference(repository);
 
 // Package identity, in one place.
 //
@@ -94,6 +73,7 @@ const packageOrigin = (pack) => {
     // `apmInstallSource.origin` is the canonical origin recorded at install time
     // from the source actually cloned — authoritative, so it wins.
     install && install.origin,
+    pack.originKey,
     pack.installSource,
     install && install.source,
     install && install.repository,
@@ -109,8 +89,16 @@ const packageOrigin = (pack) => {
 // The full identity of a package: its install slot (name) and its unique origin.
 const packageCoordinate = (pack) => ({
   name: pack ? pack.name : undefined,
-  origin: packageOrigin(pack),
+  originKey: packageOrigin(pack),
 });
+
+const packagePanelKey = (pack) => {
+  if (!pack) return "package:unknown";
+  if (pack.packageKind === "builtin" || pack.isBuiltinDescriptor) return `builtin:${pack.name}`;
+  const origin = packageOrigin(pack);
+  if (origin) return `community:${origin}`;
+  return `local:${pack.name}`;
+};
 
 // The origin key(s) identifying where an installed package actually came from.
 // Kept as an array for callers that match with `includes`; today this is the
@@ -127,7 +115,8 @@ const getInstalledPackageMetadata = (name) => {
   if (loadedPackage && loadedPackage.metadata) return loadedPackage.metadata;
   for (const dirPath of atom.packages.getPackageDirPaths()) {
     try {
-      return JSON.parse(fs.readFileSync(path.join(dirPath, name, "package.json"), "utf8"));
+      const metadataPath = CSON.resolve(path.join(dirPath, name, "package"));
+      if (metadataPath) return CSON.readFileSync(metadataPath);
     } catch {
       // not installed in this directory; keep looking
     }
@@ -160,6 +149,7 @@ module.exports = {
   repoReferenceFromRepository,
   packageOrigin,
   packageCoordinate,
+  packagePanelKey,
   installedOriginKeys,
   getInstalledPackageMetadata,
   packageComparatorAscending,

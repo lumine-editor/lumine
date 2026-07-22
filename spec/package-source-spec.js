@@ -1,9 +1,13 @@
 const {
+  assertSafeCatalogPackageSource,
   cloneUrlForRepository,
+  listPackageRepositoryRefs,
+  normalizeRepositoryOrigin,
   parsePackageSource,
   parseRemoteTags,
   resolvePackageSource,
   selectLatestTag,
+  sortRemoteTags,
 } = require("../src/package-source");
 
 describe("package source", function () {
@@ -52,6 +56,36 @@ describe("package source", function () {
     );
   });
 
+  it("normalizes transports and preserves unknown-host path case", function () {
+    expect(normalizeRepositoryOrigin("Owner/Repo@1.0.0")).toBe("github.com/owner/repo");
+    expect(normalizeRepositoryOrigin("git@github.com:OWNER/Repo.git")).toBe(
+      "github.com/owner/repo",
+    );
+    expect(normalizeRepositoryOrigin("ssh://git@example.test:22/Owner/Repo.git")).toBe(
+      "example.test/Owner/Repo",
+    );
+    expect(normalizeRepositoryOrigin("https://example.test/owner/repo.git")).toBe(
+      "example.test/owner/repo",
+    );
+    expect(normalizeRepositoryOrigin("https://Example.test:8443/Owner/Repo.git")).toBe(
+      "example.test:8443/Owner/Repo",
+    );
+    expect(normalizeRepositoryOrigin("https://[2001:4860:4860::8888]:8443/Owner/Repo.git")).toBe(
+      "[2001:4860:4860::8888]:8443/Owner/Repo",
+    );
+  });
+
+  it("limits automatic catalog sources to public HTTPS", function () {
+    expect(assertSafeCatalogPackageSource("Owner/Repo").originKey).toBe("github.com/owner/repo");
+    expect(() => assertSafeCatalogPackageSource("git@github.com:owner/repo.git")).toThrow();
+    expect(() => assertSafeCatalogPackageSource("git://github.com/owner/repo.git")).toThrow();
+    expect(() => assertSafeCatalogPackageSource("ext::helper owner/repo")).toThrow();
+    expect(() => assertSafeCatalogPackageSource("file:///tmp/owner/repo")).toThrow();
+    expect(() => assertSafeCatalogPackageSource("https://localhost/owner/repo")).toThrow();
+    expect(() => assertSafeCatalogPackageSource("https://10.0.0.1/owner/repo")).toThrow();
+    expect(() => assertSafeCatalogPackageSource("../repo")).toThrow();
+  });
+
   it("selects the highest stable semver tag and uses peeled annotated tag SHAs", function () {
     const tags = parseRemoteTags(
       [
@@ -66,6 +100,25 @@ describe("package source", function () {
       sha: "4444444444444444444444444444444444444444",
       version: "1.5.0",
     });
+  });
+
+  it("falls back to the default branch when a repository has only prerelease tags", function () {
+    expect(
+      selectLatestTag([{ name: "v2.0.0-beta.1", sha: "2222222222222222222222222222222222222222" }]),
+    ).toBeNull();
+
+    let call = 0;
+    waitsForPromise(() =>
+      resolvePackageSource("owner/repo", async () => {
+        call++;
+        return call === 1
+          ? "2222222222222222222222222222222222222222\trefs/tags/v2.0.0-beta.1"
+          : "1111111111111111111111111111111111111111\tHEAD";
+      }).then((resolved) => {
+        expect(resolved.selector).toEqual({ type: "default", value: "HEAD" });
+        expect(resolved.updatePolicy).toBe("default-branch");
+      }),
+    );
   });
 
   it("resolves the default selector to the latest stable tag", function () {
@@ -96,4 +149,28 @@ describe("package source", function () {
       }),
     );
   });
+
+  it("sorts stable, prerelease, and textual tags and lists branches lazily", function () {
+    expect(
+      sortRemoteTags([
+        { name: "nightly", sha: SHA },
+        { name: "v2.0.0-beta.1", sha: SHA },
+        { name: "v1.0.0", sha: SHA },
+      ]).map(({ name }) => name),
+    ).toEqual(["v1.0.0", "v2.0.0-beta.1", "nightly"]);
+
+    waitsForPromise(() =>
+      listPackageRepositoryRefs(
+        "owner/repo",
+        async () =>
+          ["ref: refs/heads/main\tHEAD", `${SHA}\tHEAD`, `${SHA}\trefs/heads/main`].join("\n"),
+        { includeBranches: true },
+      ).then((refs) => {
+        expect(refs.defaultBranch).toBe("main");
+        expect(refs.branches).toEqual([{ name: "main", sha: SHA }]);
+      }),
+    );
+  });
 });
+
+const SHA = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";

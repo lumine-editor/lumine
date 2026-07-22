@@ -1,6 +1,8 @@
 const CommunityPackageCatalogClient = require("../lib/community-package-catalog-client");
-const { normalizeCatalogSource } = CommunityPackageCatalogClient;
-const path = require("path");
+const { normalizeCatalogSource, TaskQueue } = CommunityPackageCatalogClient;
+
+const SHA_1 = "1111111111111111111111111111111111111111";
+const SHA_2 = "2222222222222222222222222222222222222222";
 
 function createStorage() {
   const values = new Map();
@@ -14,196 +16,466 @@ function createStorage() {
   };
 }
 
-// A minimal stand-in for the fetch Response used by the catalog client.
-function jsonResponse(status, body) {
+function textResponse(status, body, headers = {}) {
   return {
     status,
-    json: () => Promise.resolve(body),
+    headers: { get: (name) => headers[name.toLowerCase()] || null },
+    text: () => Promise.resolve(typeof body === "string" ? body : JSON.stringify(body)),
   };
 }
 
+function createPackageManager({ branches = false } = {}) {
+  return {
+    getGitCommand: () => "git",
+    runProcess: jasmine.createSpy("runProcess").andCallFake((_command, args) => {
+      if (args[0] !== "ls-remote") return Promise.resolve({ stdout: "" });
+      const includeBranches = args.includes("refs/heads/*");
+      return Promise.resolve({
+        stdout: [
+          "ref: refs/heads/main\tHEAD",
+          `${SHA_1}\tHEAD`,
+          `${SHA_1}\trefs/tags/v1.0.0`,
+          `${SHA_2}\trefs/tags/v2.0.0-beta.1`,
+          ...(includeBranches || branches
+            ? [`${SHA_1}\trefs/heads/main`, `${SHA_2}\trefs/heads/Next`]
+            : []),
+        ].join("\n"),
+      });
+    }),
+  };
+}
+
+function createFetch(catalogs = {}) {
+  return jasmine.createSpy("fetchImpl").andCallFake((url) => {
+    if (Object.hasOwn(catalogs, url)) return Promise.resolve(textResponse(200, catalogs[url]));
+    if (url.includes("raw.githubusercontent.com/owner/package/")) {
+      return Promise.resolve(
+        textResponse(200, {
+          name: "sample-package",
+          version: "1.0.0",
+          description: "From its repository",
+          repository: "https://github.com/OWNER/package.git",
+          engines: { atom: "*" },
+          readme: "# Must remain lazy",
+          badges: [{ image: "https://example.test/badge.svg" }],
+        }),
+      );
+    }
+    return Promise.resolve(textResponse(404, "not found"));
+  });
+}
+
 describe("CommunityPackageCatalogClient", function () {
-  it("normalizes repository shorthands and index URLs", function () {
+  it("normalizes sources.json locations and rejects legacy indexes", function () {
     expect(normalizeCatalogSource("owner/catalog")).toBe(
-      "https://raw.githubusercontent.com/owner/catalog/main/index.json",
+      "https://raw.githubusercontent.com/owner/catalog/main/sources.json",
     );
     expect(normalizeCatalogSource("https://github.com/owner/catalog.git")).toBe(
-      "https://raw.githubusercontent.com/owner/catalog/main/index.json",
+      "https://raw.githubusercontent.com/owner/catalog/main/sources.json",
     );
     expect(normalizeCatalogSource("https://catalog.example/community")).toBe(
-      "https://catalog.example/community/index.json",
+      "https://catalog.example/community/sources.json",
     );
-    expect(normalizeCatalogSource("https://catalog.example/custom.json")).toBe(
-      "https://catalog.example/custom.json",
-    );
+    expect(() => normalizeCatalogSource("https://example.test/index.json")).toThrow();
   });
 
-  it("loads a catalog directly from a local JSON file", function () {
+  it("accepts only source strings and rejects the old metadata schema", function () {
     const client = new CommunityPackageCatalogClient({ storage: createStorage() });
-    const catalogPath = path.join(__dirname, "fixtures", "community-package-catalog.json");
+    expect(client.validate(["owner/package@1.0.0"])[0]).toEqual(
+      jasmine.objectContaining({
+        originKey: "github.com/owner/package",
+        repository: "owner/package",
+        selector: { type: "tag", value: "1.0.0" },
+      }),
+    );
+    expect(() => client.validate({ schemaVersion: 1, packages: [] })).toThrow();
+    expect(() => client.validate(["owner/package#abcdef1"])).toThrow();
+  });
+
+  it("blocks unsafe automatic repository transports and local targets", function () {
+    const client = new CommunityPackageCatalogClient({ storage: createStorage() });
+    expect(() => client.validate(["git@github.com:owner/package.git"])).toThrow();
+    expect(() => client.validate(["file:///tmp/package"])).toThrow();
+    expect(() => client.validate(["https://127.0.0.1/package"])).toThrow();
+    expect(() => client.validate(["https://user:secret@example.test/package"])).toThrow();
+  });
+
+  it("hydrates names and metadata from the exact selected SHA", function () {
+    const catalogUrl = "https://catalog.test/sources.json";
+    const fetchImpl = createFetch({ [catalogUrl]: ["owner/package"] });
+    const client = new CommunityPackageCatalogClient({
+      fetchImpl,
+      packageManager: createPackageManager(),
+      storage: createStorage(),
+      atomVersion: () => "1.132.1",
+    });
 
     waitsForPromise(() =>
-      client.load(catalogPath).then((catalog) => {
-        expect(catalog.packages[0].name).toBe("local-package");
-        expect(catalog.packages[0].catalogSource).toBe(catalogPath);
+      client.loadAll([catalogUrl], { refresh: true }).then((catalog) => {
+        expect(catalog.packages.length).toBe(1);
+        expect(catalog.packages[0]).toEqual(
+          jasmine.objectContaining({
+            name: "sample-package",
+            originKey: "github.com/owner/package",
+            resolvedSha: SHA_1,
+            selectedRef: { type: "latest", value: "v1.0.0" },
+            status: "ready",
+            readme: undefined,
+            badges: [],
+          }),
+        );
+        expect(
+          fetchImpl.argsForCall.some((args) => args[0].includes(`/${SHA_1}/package.json`)),
+        ).toBe(true);
       }),
     );
   });
 
-  it("validates and normalizes catalog entries", function () {
-    const client = new CommunityPackageCatalogClient({ storage: createStorage() });
-    const catalog = client.validate({
-      schemaVersion: 1,
-      packages: [
-        {
-          name: "sample-package",
-          repository: "owner/sample-package@2.1.0",
-          keywords: ["sample", 42],
+  it("uses the persistent cache without automatic revalidation", function () {
+    const catalogUrl = "https://catalog.test/sources.json";
+    const storage = createStorage();
+    const fetchImpl = createFetch({ [catalogUrl]: ["owner/package"] });
+    const client = new CommunityPackageCatalogClient({
+      fetchImpl,
+      packageManager: createPackageManager(),
+      storage,
+    });
+
+    waitsForPromise(() =>
+      client
+        .loadAll([catalogUrl], { refresh: true })
+        .then(() => {
+          fetchImpl.reset();
+          return client.loadAll([catalogUrl]);
+        })
+        .then((catalog) => {
+          expect(catalog.cached).toBe(true);
+          expect(catalog.packages[0].name).toBe("sample-package");
+          expect(fetchImpl).not.toHaveBeenCalled();
+          return client.loadAll([catalogUrl, "new/catalog"], { cacheOnly: true });
+        })
+        .then((catalog) => {
+          expect(catalog.packages[0].name).toBe("sample-package");
+          expect(catalog.pendingSources).toEqual([
+            "https://raw.githubusercontent.com/new/catalog/main/sources.json",
+          ]);
+        }),
+    );
+  });
+
+  it("preserves the complete previous cache when a refresh is cancelled", function () {
+    const catalogUrl = "https://catalog.test/sources.json";
+    const storage = createStorage();
+    storage.setItem(
+      "settings-view:community-package-catalog-v2",
+      JSON.stringify({
+        schemaVersion: 2,
+        lastFetch: 123,
+        catalogSources: [catalogUrl],
+        manifests: {},
+        readmes: {},
+        packages: {
+          "github.com/owner/package": {
+            name: "cached-package",
+            originKey: "github.com/owner/package",
+            repository: "owner/package",
+            installSource: "owner/package",
+            catalogSources: [catalogUrl],
+            status: "ready",
+          },
         },
-      ],
-    });
-
-    expect(catalog.packages[0].repository).toBe("owner/sample-package");
-    expect(catalog.packages[0].installSource).toBe("owner/sample-package@2.1.0");
-    expect(catalog.packages[0].keywords).toEqual(["sample"]);
-    expect(catalog.packages[0].engines).toEqual({ atom: "*" });
-  });
-
-  it("allows the same name from different repositories", function () {
-    const client = new CommunityPackageCatalogClient({ storage: createStorage() });
-    const catalog = client.validate({
-      schemaVersion: 1,
-      packages: [
-        { name: "shared", repository: "owner/one" },
-        { name: "shared", repository: "owner/two" },
-      ],
-    });
-
-    expect(catalog.packages.map(({ repository }) => repository)).toEqual([
-      "owner/one",
-      "owner/two",
-    ]);
-  });
-
-  it("rejects duplicate repositories", function () {
-    const client = new CommunityPackageCatalogClient({ storage: createStorage() });
-    expect(() =>
-      client.validate({
-        schemaVersion: 1,
-        packages: [
-          { name: "one", repository: "owner/pkg" },
-          { name: "two", repository: "owner/pkg@2.0.0" },
-        ],
       }),
-    ).toThrow();
-  });
-
-  it("uses a fresh cache without requesting the catalog again", function () {
-    let now = 100;
-    const storage = createStorage();
-    const fetchImpl = jasmine.createSpy("fetchImpl").andCallFake(() =>
-      Promise.resolve(
-        jsonResponse(200, {
-          schemaVersion: 1,
-          packages: [{ name: "cached", repository: "owner/cached" }],
-        }),
-      ),
     );
-    const client = new CommunityPackageCatalogClient({ fetchImpl, storage, now: () => now });
+    const client = new CommunityPackageCatalogClient({
+      fetchImpl: createFetch({ [catalogUrl]: ["owner/package"] }),
+      packageManager: createPackageManager(),
+      storage,
+    });
 
     waitsForPromise(() =>
       client
-        .load("https://example.test/index.json")
-        .then(() => {
-          now += 100;
-          return client.load("https://example.test/index.json");
+        .loadAll([catalogUrl], {
+          refresh: true,
+          onProgress({ processed }) {
+            if (processed === 0) client.cancel();
+          },
         })
         .then((catalog) => {
-          expect(catalog.packages[0].name).toBe("cached");
-          expect(fetchImpl.callCount).toBe(1);
+          expect(catalog.cancelled).toBe(true);
+          expect(catalog.lastFetch).toBe(123);
+          expect(catalog.packages.map(({ name }) => name)).toEqual(["cached-package"]);
+          return client.loadAll([catalogUrl], { cacheOnly: true });
+        })
+        .then((catalog) => {
+          expect(catalog.packages.map(({ name }) => name)).toEqual(["cached-package"]);
         }),
     );
   });
 
-  it("preserves repository selectors when reading cached metadata", function () {
-    const storage = createStorage();
-    const fetchImpl = () =>
-      Promise.resolve(
-        jsonResponse(200, {
-          schemaVersion: 1,
-          packages: [{ name: "selected", repository: "owner/selected@2.1.0" }],
-        }),
-      );
-    const client = new CommunityPackageCatalogClient({ fetchImpl, storage, now: () => 100 });
+  it("merges provenance and keeps the first catalog selector", function () {
+    const first = "https://one.test/sources.json";
+    const second = "https://two.test/sources.json";
+    const client = new CommunityPackageCatalogClient({
+      fetchImpl: createFetch({
+        [first]: ["owner/package@1.0.0"],
+        [second]: ["https://github.com/owner/package.git#branch:Next"],
+      }),
+      packageManager: createPackageManager(),
+      storage: createStorage(),
+    });
+    waitsForPromise(() =>
+      client.loadAll([first, second], { refresh: true }).then((catalog) => {
+        expect(catalog.packages.length).toBe(1);
+        expect(catalog.packages[0].installSource).toBe("owner/package@1.0.0");
+        expect(catalog.packages[0].catalogSources).toEqual([first, second]);
+        expect(catalog.packages[0].selectorConflict).toBe(true);
+      }),
+    );
+  });
 
+  it("loads the complete branch list lazily and caches it", function () {
+    const catalogUrl = "https://catalog.test/sources.json";
+    const packageManager = createPackageManager();
+    const client = new CommunityPackageCatalogClient({
+      fetchImpl: createFetch({ [catalogUrl]: ["owner/package"] }),
+      packageManager,
+      storage: createStorage(),
+    });
     waitsForPromise(() =>
       client
-        .load("https://example.test/index.json")
-        .then(() => client.load("https://example.test/index.json"))
+        .loadAll([catalogUrl], { refresh: true })
         .then((catalog) => {
-          expect(catalog.packages[0].installSource).toBe("owner/selected@2.1.0");
+          expect(catalog.packages[0].refs.branches).toBeNull();
+          return client.loadBranches(catalog.packages[0]);
+        })
+        .then((pack) => {
+          expect(pack.refs.branches.map(({ name }) => name)).toEqual(["main", "Next"]);
+          expect(packageManager.runProcess.mostRecentCall.args[1]).toContain("refs/heads/*");
         }),
     );
   });
 
-  it("never touches the network in cacheOnly mode", function () {
-    let now = 100;
+  it("keeps the previous hydrated record as stale when a repository refresh fails", function () {
+    const catalogUrl = "https://catalog.test/sources.json";
     const storage = createStorage();
-    const fetchImpl = jasmine.createSpy("fetchImpl").andCallFake(() =>
-      Promise.resolve(
-        jsonResponse(200, {
-          schemaVersion: 1,
-          packages: [{ name: "cached", repository: "owner/cached" }],
-        }),
-      ),
+    let sha = SHA_1;
+    let failManifest = false;
+    const packageManager = createPackageManager();
+    packageManager.runProcess.andCallFake(() =>
+      Promise.resolve({
+        stdout: ["ref: refs/heads/main\tHEAD", `${sha}\tHEAD`, `${sha}\trefs/tags/v1.0.0`].join(
+          "\n",
+        ),
+      }),
     );
-    const client = new CommunityPackageCatalogClient({ fetchImpl, storage, now: () => now });
-
-    waitsForPromise(() =>
-      client
-        .load("https://example.test/index.json", { cacheOnly: true })
-        .then((catalog) => {
-          expect(catalog).toBeNull();
-          expect(fetchImpl.callCount).toBe(0);
-          return client.load("https://example.test/index.json");
-        })
-        .then(() => {
-          now += CommunityPackageCatalogClient.CACHE_TTL + 1;
-          return client.load("https://example.test/index.json", { cacheOnly: true });
-        })
-        .then((catalog) => {
-          expect(catalog.packages[0].name).toBe("cached");
-          expect(fetchImpl.callCount).toBe(1);
-        }),
-    );
-  });
-
-  it("falls back to stale cached data when refresh fails", function () {
-    let fail = false;
-    let now = 100;
-    const storage = createStorage();
-    const fetchImpl = () => {
-      if (fail) return Promise.reject(new Error("offline"));
+    const fetchImpl = jasmine.createSpy("fetchImpl").andCallFake((url) => {
+      if (url === catalogUrl) return Promise.resolve(textResponse(200, ["owner/package"]));
+      if (failManifest) return Promise.resolve(textResponse(404, "missing"));
       return Promise.resolve(
-        jsonResponse(200, {
-          schemaVersion: 1,
-          packages: [{ name: "offline", repository: "owner/offline" }],
+        textResponse(200, {
+          name: "sample-package",
+          version: "1.0.0",
+          repository: "owner/package",
+          engines: { atom: "*" },
         }),
       );
-    };
-    const client = new CommunityPackageCatalogClient({ fetchImpl, storage, now: () => now });
+    });
+    const client = new CommunityPackageCatalogClient({ fetchImpl, packageManager, storage });
 
     waitsForPromise(() =>
       client
-        .load("https://example.test/index.json")
+        .loadAll([catalogUrl], { refresh: true })
         .then(() => {
-          fail = true;
-          now += CommunityPackageCatalogClient.CACHE_TTL + 1;
-          return client.load("https://example.test/index.json");
+          sha = SHA_2;
+          failManifest = true;
+          return client.loadAll([catalogUrl], { refresh: true });
         })
         .then((catalog) => {
-          expect(catalog.packages[0].name).toBe("offline");
+          expect(catalog.packages[0].name).toBe("sample-package");
+          expect(catalog.packages[0].status).toBe("stale");
+          expect(catalog.packages[0].error).toContain("does not contain");
         }),
+    );
+  });
+
+  it("keeps a renderable origin-based error record when first hydration fails", function () {
+    const catalogUrl = "https://catalog.test/sources.json";
+    const client = new CommunityPackageCatalogClient({
+      fetchImpl: jasmine
+        .createSpy("fetchImpl")
+        .andCallFake((url) =>
+          Promise.resolve(
+            url === catalogUrl
+              ? textResponse(200, ["owner/broken-package"])
+              : textResponse(404, "missing"),
+          ),
+        ),
+      packageManager: createPackageManager(),
+      storage: createStorage(),
+    });
+
+    waitsForPromise(() =>
+      client.loadAll([catalogUrl], { refresh: true }).then((catalog) => {
+        expect(catalog.packages[0]).toEqual(
+          jasmine.objectContaining({
+            name: "broken-package",
+            originKey: "github.com/owner/broken-package",
+            unverifiedName: true,
+            status: "error",
+          }),
+        );
+      }),
+    );
+  });
+
+  it("rejects more than 2000 unique origins before hydration", function () {
+    const catalogUrl = "https://catalog.test/sources.json";
+    const sources = Array.from({ length: 2001 }, (_value, index) => `owner/package-${index}`);
+    const client = new CommunityPackageCatalogClient({
+      fetchImpl: createFetch({ [catalogUrl]: sources }),
+      packageManager: createPackageManager(),
+      storage: createStorage(),
+    });
+    waitsForPromise(() =>
+      client.loadAll([catalogUrl], { refresh: true }).then(
+        () => Promise.reject(new Error("expected rejection")),
+        (error) => expect(error.message).toContain("safety limit"),
+      ),
+    );
+  });
+
+  it("hydrates and persists an index of 1000 repositories with bounded host concurrency", function () {
+    const catalogUrl = "https://catalog.test/sources.json";
+    const sources = Array.from({ length: 1000 }, (_value, index) => `owner/package-${index}`);
+    const storage = createStorage();
+    let activeGit = 0;
+    let activeHttp = 0;
+    let maximumGit = 0;
+    let maximumHttp = 0;
+    let finalProgress = null;
+    const packageManager = {
+      getGitCommand: () => "git",
+      runProcess: jasmine.createSpy("runProcess").andCallFake(() => {
+        activeGit++;
+        maximumGit = Math.max(maximumGit, activeGit);
+        return Promise.resolve().then(() => {
+          activeGit--;
+          return {
+            stdout: [
+              "ref: refs/heads/main\tHEAD",
+              `${SHA_1}\tHEAD`,
+              `${SHA_1}\trefs/tags/v1.0.0`,
+            ].join("\n"),
+          };
+        });
+      }),
+    };
+    const fetchImpl = jasmine.createSpy("fetchImpl").andCallFake((url) => {
+      activeHttp++;
+      maximumHttp = Math.max(maximumHttp, activeHttp);
+      return Promise.resolve().then(() => {
+        activeHttp--;
+        if (url === catalogUrl) return textResponse(200, sources);
+        const match = url.match(/\/owner\/(package-\d+)\//);
+        return textResponse(200, {
+          name: match[1],
+          version: "1.0.0",
+          repository: `owner/${match[1]}`,
+          engines: { atom: "*" },
+        });
+      });
+    });
+    const client = new CommunityPackageCatalogClient({
+      fetchImpl,
+      packageManager,
+      storage,
+    });
+
+    waitsForPromise(() =>
+      client
+        .loadAll([catalogUrl], {
+          refresh: true,
+          onProgress(progress) {
+            finalProgress = progress;
+          },
+        })
+        .then((catalog) => {
+          expect(catalog.packages.length).toBe(1000);
+          expect(finalProgress).toEqual({ processed: 1000, total: 1000, errors: 0 });
+          expect(maximumGit).toBeLessThanOrEqual(4);
+          expect(maximumHttp).toBeLessThanOrEqual(4);
+          return new CommunityPackageCatalogClient({ storage }).loadAll([catalogUrl], {
+            cacheOnly: true,
+          });
+        })
+        .then((catalog) => expect(catalog.packages.length).toBe(1000)),
+    );
+  });
+
+  it("loads README lazily at the exact SHA and reuses its bounded cache", function () {
+    const storage = createStorage();
+    const fetchImpl = jasmine
+      .createSpy("fetchImpl")
+      .andReturn(Promise.resolve(textResponse(200, "# Exact README")));
+    const client = new CommunityPackageCatalogClient({ fetchImpl, storage });
+    const pack = {
+      originKey: "github.com/owner/package",
+      repository: "owner/package",
+      resolvedSha: SHA_1,
+    };
+    waitsForPromise(() =>
+      client
+        .loadReadme(pack)
+        .then((readme) => {
+          expect(readme.body).toBe("# Exact README");
+          expect(fetchImpl.mostRecentCall.args[0]).toContain(`/${SHA_1}/README.md`);
+          fetchImpl.reset();
+          return client.loadReadme(pack);
+        })
+        .then((readme) => {
+          expect(readme.body).toBe("# Exact README");
+          expect(fetchImpl).not.toHaveBeenCalled();
+        }),
+    );
+  });
+
+  it("enforces queue and per-host concurrency", function () {
+    const queue = new TaskQueue(3, 2);
+    let active = 0;
+    let maximum = 0;
+    const tasks = Array.from({ length: 8 }, () =>
+      queue.add(async () => {
+        active++;
+        maximum = Math.max(maximum, active);
+        await Promise.resolve();
+        active--;
+      }, "same-host"),
+    );
+    waitsForPromise(() =>
+      Promise.all(tasks).then(() => {
+        expect(maximum).toBe(2);
+      }),
+    );
+  });
+
+  it("retries transient HTTP failures with bounded backoff", function () {
+    let attempts = 0;
+    const client = new CommunityPackageCatalogClient({
+      fetchImpl: jasmine.createSpy("fetchImpl").andCallFake(() => {
+        attempts++;
+        return Promise.resolve(
+          attempts === 1 ? textResponse(500, "temporary") : textResponse(200, "ready"),
+        );
+      }),
+      storage: createStorage(),
+      delay: () => Promise.resolve(),
+    });
+
+    waitsForPromise(() =>
+      client.requestText("https://catalog.test/sources.json", { maxBytes: 1024 }).then((body) => {
+        expect(body).toBe("ready");
+        expect(attempts).toBe(2);
+      }),
     );
   });
 });
