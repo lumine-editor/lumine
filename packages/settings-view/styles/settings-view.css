@@ -494,7 +494,16 @@
     padding-top: var(--component-padding);
     background-color: hsl(from var(--base-background-color) h s calc(l + 2));
     border-right: 1px solid var(--base-border-color);
-    overflow-x: auto;
+    /* Column layout so the panel menu and button stay put and only the TOC
+       scrolls when it is long. */
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+
+    .panels-menu,
+    .button-area {
+      flex: 0 0 auto;
+    }
 
     .icon:before {
       text-align: center;
@@ -506,6 +515,10 @@
       border-top: 1px solid var(--base-border-color);
       padding-top: calc(var(--component-padding) / 2);
       padding-bottom: var(--component-padding);
+      /* Only the TOC scrolls; the panel menu above stays fixed. */
+      flex: 1 1 auto;
+      min-height: 0;
+      overflow-y: auto;
 
       .config-toc-list {
         margin: 0;
