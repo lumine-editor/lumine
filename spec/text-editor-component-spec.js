@@ -599,6 +599,13 @@ describe("TextEditorComponent", () => {
 
     it("blinks cursors when the editor is focused and the cursors are not moving", async () => {
       assertDocumentFocused();
+      let blink;
+      spyOn(window, "setInterval").and.callFake((callback) => {
+        blink = callback;
+        return 1;
+      });
+      spyOn(window, "clearInterval");
+
       // Leave cursorBlinkResumeDelay at its default so the post-movement
       // assertions at the end cannot race a resumed blink cycle.
       const { component, element, editor } = buildComponent({ cursorBlinkPeriod: 40 });
@@ -608,31 +615,25 @@ describe("TextEditorComponent", () => {
       await component.getNextUpdatePromise();
       const [cursor1, cursor2] = element.querySelectorAll(".cursor");
 
-      // Every blink toggle performs a cursor-only update, so waiting on update
-      // promises observes each phase instead of sampling the blink interval on
-      // a coarser timer grid.
-      const waitForCursorOpacity = async (opacity) => {
-        for (let i = 0; i < 100; i++) {
-          if (
-            getComputedStyle(cursor1).opacity === opacity &&
-            getComputedStyle(cursor2).opacity === opacity
-          ) {
-            return;
-          }
-          await component.getNextUpdatePromise();
-        }
-        throw new Error(`Timed out waiting for cursor opacity ${opacity}`);
-      };
+      expect(getComputedStyle(cursor1).opacity).toBe("1");
+      expect(getComputedStyle(cursor2).opacity).toBe("1");
 
-      await waitForCursorOpacity("1");
-      await waitForCursorOpacity("0");
-      await waitForCursorOpacity("1");
+      blink();
+      await component.getNextUpdatePromise();
+      expect(getComputedStyle(cursor1).opacity).toBe("0");
+      expect(getComputedStyle(cursor2).opacity).toBe("0");
+
+      blink();
+      await component.getNextUpdatePromise();
+      expect(getComputedStyle(cursor1).opacity).toBe("1");
+      expect(getComputedStyle(cursor2).opacity).toBe("1");
 
       editor.moveRight();
       await component.getNextUpdatePromise();
 
       expect(getComputedStyle(cursor1).opacity).toBe("1");
       expect(getComputedStyle(cursor2).opacity).toBe("1");
+      expect(window.clearInterval).toHaveBeenCalledWith(1);
     });
 
     it('gives cursors at the end of lines the width of an "x" character', async () => {
